@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-net = pn.create_cigre_network_mv(with_der="all")
+net = pn.create_cigre_network_lv()
+#net = pn.create_cigre_network_mv(False)
+# False, 'pv_wind', 'all'
 
 '''
 This pandapower network includes the following parameter tables:
@@ -148,7 +149,7 @@ for node, centrality in degree_centrality.items():
 
 print(f"\nAverage Degree Centrality: {avg_degree_centrality}")
 
-add_indicator('Average Degree Centrality',avg_degree_centrality)
+add_indicator('Average Degree Centrality',max(0,avg_degree_centrality))
 
 def calculate_modularity_index(G, communities):
     modularity_index = 0.0
@@ -177,7 +178,7 @@ modularity_index = calculate_modularity_index(G, communities)
 
 print(f"Modularity Index (Q): {modularity_index}")
 
-add_indicator('Modularity Index',modularity_index)
+add_indicator('Modularity Index',max(0,modularity_index))
 
 erfolg = 0
 misserfolg = 0
@@ -220,71 +221,150 @@ selfsuff = erfolg / (erfolg + misserfolg)
 print(f" self sufficiency: {selfsuff}")
 add_indicator('self sufficiency at bus level',selfsuff)
 
-def calculate_shannon_evenness(net):
-    # Step 1: Identify and count different types of sgen
-    if 'type' in net.sgen.columns:
-        sgen_types = net.sgen['type'].value_counts()
+
+def calculate_shannon_evenness_and_variety(data, max_known_types):
+    """
+    Calculate Shannon evenness and variety for a given DataFrame based on the 'type' attribute.
+
+    :param data: The DataFrame containing the component data
+    :param max_known_types: The maximum number of known types for the component
+    :return: Tuple of (Shannon evenness, variety)
+    """
+    if 'type' in data.columns:
+        component_types = data['type'].value_counts()
     else:
-        # If 'type' column doesn't exist, return None or appropriate value
-        print("No 'type' column found in net.sgen")
-        return None
+        print("No 'type' column found in the data")
+        return None, None
 
-    # Step 2: Calculate the proportion of each type
-    total_sgen = len(net.sgen)
-    proportions = sgen_types / total_sgen
+    # Calculate the proportion of each type
+    total_components = len(data)
+    proportions = component_types / total_components
 
-    # Step 3: Calculate the Shannon entropy
+    # Calculate the Shannon entropy
     shannon_entropy = -np.sum(proportions * np.log(proportions))
 
-    # Step 4: Calculate the Shannon evenness
-    max_entropy = np.log(len(sgen_types))
+    # Calculate the Shannon evenness
+    max_entropy = np.log(len(component_types))
     shannon_evenness = shannon_entropy / max_entropy if max_entropy > 0 else 0
 
-    #print(f"Variety: {sgen_types}")
-    Variety = len(sgen_types) / 5
-    #Variety = sgen_types
-    print(sgen_types)
+    # Calculate the variety
+    variety = len(component_types)
+    max_variety = max_known_types
+    variety_scaled = variety / max_variety
 
-    return shannon_evenness,Variety
+    return shannon_evenness, variety, variety_scaled, max_variety
 
-# Calculate Shannon evenness
-shannon_evenness,Variety = calculate_shannon_evenness(net)
-print(f"Shannon Evenness: {shannon_evenness}")
-print(f"Variety: {Variety}")
 
-add_indicator('Shannon Evenness',shannon_evenness)
-add_indicator('Variety',Variety)
+# Define the maximum known types for each component
+max_known_types = {
+    'generation': 8,  # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
+    'line': 2,  # "ol" (overhead line) and "cs" (cable system)
+    'load': 10  # Example: 4 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
+}
+
+# Combine sgen, gen, and storage into one DataFrame
+generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
+
+# Calculate and print Shannon evenness and variety for combined generation units
+evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
+print(f"Generation - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
+
+add_indicator("Generation Shannon Evenness", evenness)
+add_indicator("Generation Variety", variety_scaled)
+#add_indicator("Generation Max Variety", max_variety)
+
+# Calculate and print Shannon evenness and variety for lines
+evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
+print(f"Line - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
+
+add_indicator("Line Shannon Evenness", evenness)
+add_indicator("Line Variety", variety_scaled)
+#add_indicator("Line Max Variety", max_variety)
+
+# Calculate and print Shannon evenness and variety for loads
+evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
+print(f"Load - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
+
+add_indicator("Load Shannon Evenness", evenness)
+add_indicator("Load Variety", variety_scaled)
+#add_indicator("Load Max Variety", max_variety)
+    # add_indicator('Shannon Evenness',shannon_evenness)
+    # add_indicator('Variety',Variety)
+
 
 def calculate_disparity_space(net, generation_factors):
-    # Ensure that sgen and storage have the required columns
-    # print(net.sgen)
-    # cos_phi=cos_phi & inverter_efficiency=efficiency not defined
+    # Ensure that sgen, gen, and storage have the required columns
+    required_columns_sgen_storage = ['bus', 'p_mw', 'q_mvar', 'sn_mva', 'type']
+    required_columns_gen = ['bus', 'p_mw', 'sn_mva', 'type']
 
-    required_columns = ['bus', 'p_mw', 'q_mvar', 'sn_mva', 'type']
-    for column in required_columns:
-        if column not in net.sgen.columns or column not in net.storage.columns:
-            print(f"Ensure that '{column}' column exists in both net.sgen and net.storage")
-            return None
+    # Ensure required columns and set NaN or missing values to 0
+    for df_name in ['sgen', 'storage', 'gen']:
+        df = getattr(net, df_name)
+        for col in ['p_mw', 'q_mvar', 'sn_mva']:
+            if col not in df.columns:
+                df[col] = 0
+            else:
+                df[col] = df[col].fillna(0)
+
+    # Check for missing 'type' column and add if missing
+    for df_name in ['sgen', 'storage', 'gen']:
+        df = getattr(net, df_name)
+        if 'type' not in df.columns:
+            df['type'] = 'default'  # You can change 'default' to any default type you prefer
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all sgen at each bus
-    net.sgen['effective_sn_mva'] = net.sgen.apply(lambda row: row['sn_mva'] * generation_factors.get(row['type'], 0),
-                                                  axis=1)
-    sgen_sums = net.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+    if not net.sgen.empty:
+        net.sgen['effective_sn_mva'] = net.sgen.apply(
+            lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
+        sgen_sums = net.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+    else:
+        sgen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all storage at each bus
-    net.storage['effective_sn_mva'] = net.storage.apply(
-        lambda row: row['sn_mva'] * generation_factors.get(row['type'], 0), axis=1)
-    storage_sums = net.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+    if not net.storage.empty:
+        net.storage['effective_sn_mva'] = net.storage.apply(
+            lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
+        storage_sums = net.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+    else:
+        storage_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
-    # Merge the sums from sgen and storage
+    # Sum p_mw and sn_mva*generation_factor over all gen at each bus
+    if not net.gen.empty:
+        net.gen['effective_sn_mva'] = net.gen.apply(lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1),
+                                                    axis=1)
+        gen_sums = net.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        gen_sums['q_mvar'] = 0  # Add a zero q_mvar column to match other dataframes
+    else:
+        gen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
+
+    print(gen_sums)
+    print(sgen_sums)
+    print(storage_sums)
+
+    # Merge the sums from sgen, storage, and gen
     total_sums = pd.merge(sgen_sums, storage_sums, on='bus', how='outer', suffixes=('_sgen', '_storage')).fillna(0)
-    total_sums['p_mw'] = total_sums['p_mw_sgen'] + total_sums['p_mw_storage']
-    total_sums['q_mvar'] = total_sums['q_mvar_sgen'] + total_sums['q_mvar_storage']
-    total_sums['effective_sn_mva'] = total_sums['effective_sn_mva_sgen'] + total_sums['effective_sn_mva_storage']
-    total_sums['sn_mva'] = total_sums['sn_mva_sgen'] + total_sums['sn_mva_storage']
+    total_sums = pd.merge(total_sums, gen_sums, on='bus', how='outer', suffixes=('', '_gen')).fillna(0)
+
+    print(total_sums)
+
+    # Sum the relevant columns
+    total_sums['p_mw'] = total_sums['p_mw'] + total_sums.get('p_mw_storage', 0) + total_sums.get('p_mw_gen', 0)
+    total_sums['q_mvar'] = total_sums['q_mvar'] + total_sums.get('q_mvar_storage', 0) + total_sums.get('q_mvar_gen', 0)
+    total_sums['effective_sn_mva'] = (total_sums['effective_sn_mva'] + total_sums.get('effective_sn_mva_storage', 0) + total_sums.get('effective_sn_mva_gen', 0))
+    total_sums['sn_mva'] = total_sums['sn_mva'] + total_sums.get('sn_mva_storage', 0) + total_sums.get('sn_mva_gen', 0)
+
+    print(total_sums)
 
     # Select only the relevant columns
-    total_sums = total_sums[['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']]
+    total_sums = total_sums[['bus', 'p_mw_sgen', 'q_mvar_sgen', 'effective_sn_mva_sgen', 'sn_mva_sgen']]
+    total_sums = total_sums.rename(columns={
+        'p_mw_sgen': 'p_mw',
+        'q_mvar_sgen': 'q_mvar',
+        'effective_sn_mva_sgen': 'effective_sn_mva',
+        'sn_mva_sgen': 'sn_mva'
+    })
+
+    print(total_sums)
 
     # Create disparity matrix (Euclidean distance between summed p_mw, q_mvar, and effective_sn_mva)
     n = len(total_sums)
@@ -293,23 +373,27 @@ def calculate_disparity_space(net, generation_factors):
     for i in range(n):
         for j in range(n):
             if i != j:
-                disparity_matrix[i, j] = np.sqrt((total_sums.p_mw.iloc[i] - total_sums.p_mw.iloc[j]) ** 2 +
-                                                 (total_sums.q_mvar.iloc[i] - total_sums.q_mvar.iloc[j]) ** 2 +
-                                                 (total_sums.effective_sn_mva.iloc[i] -
-                                                  total_sums.effective_sn_mva.iloc[j]) ** 2 +
-                                                 (total_sums.sn_mva.iloc[i] - total_sums.sn_mva.iloc[j]) ** 2)
+                disparity_matrix[i, j] = np.sqrt(
+                    (total_sums.p_mw.iloc[i] - total_sums.p_mw.iloc[j]) ** 2 +
+                    (total_sums.q_mvar.iloc[i] - total_sums.q_mvar.iloc[j]) ** 2 +
+                    (total_sums.effective_sn_mva.iloc[i] - total_sums.effective_sn_mva.iloc[j]) ** 2 +
+                    (total_sums.sn_mva.iloc[i] - total_sums.sn_mva.iloc[j]) ** 2
+                )
 
     # Convert to DataFrame for easier handling
     disparity_df = pd.DataFrame(disparity_matrix, index=total_sums.bus, columns=total_sums.bus)
 
-    # max disparity
+    # Calculate maximum disparity
     max_p = total_sums['p_mw'].max()
     max_q = total_sums['q_mvar'].max()
     max_sn = total_sums['sn_mva'].max()
     max_eff = total_sums['effective_sn_mva'].max()
-    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_eff **2 + max_sn **2)
-    n = len(total_sums)
+    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_eff ** 2 + max_sn ** 2)
+
+
+    # Calculate theoretical maximum integral value of disparity
     max_integral_value = (n * (n - 1) / 2) * max_disparity
+    max_integral_value = max(1, max_integral_value)
 
     return disparity_df, max_integral_value
 
@@ -326,6 +410,12 @@ def calculate_generation_factors(net):
             generation_factors[sgen_type] = 0.25  # Example factor
         elif sgen_type == 'biomass':
             generation_factors[sgen_type] = 0.8  # Example factor
+        elif sgen_type == 'Residential fuel cell':
+            generation_factors[sgen_type] = 1  # Example factor
+        elif sgen_type == 'CHP diesel':
+            generation_factors[sgen_type] = 1  # Example factor
+        elif sgen_type == 'Fuel cell':
+            generation_factors[sgen_type] = 1  # Example factor
 
     # Calculate for batteries (storage)
     for idx, row in net.storage.iterrows():
@@ -350,7 +440,31 @@ add_disparity('Generators', integral_value_gen, max_integral_gen, integral_value
 
 def calculate_load_disparity(net):
     # Ensure load DataFrame has the required columns
+    # Ensure the required columns exist
+    if 'p_mw' not in net.load.columns or 'q_mvar' not in net.load.columns:
+        # Calculate missing p_mw and q_mvar if cos_phi and mode are available
+        if 'cos_phi' in net.load.columns and 'mode' in net.load.columns:
+            net.load['p_mw'] = net.load.apply(lambda row: row['sn_mva'] * row['cos_phi'], axis=1)
+            net.load['q_mvar'] = net.load.apply(lambda row: row['sn_mva'] * np.sqrt(1 - row['cos_phi'] ** 2), axis=1)
+        else:
+            raise ValueError("Missing required columns and unable to calculate due to missing cos_phi or mode.")
+
+    # Replace missing sn_mva or NaN with zero and calculate if necessary
+    if 'sn_mva' not in net.load.columns or net.load['sn_mva'].isnull().any():
+        if 'cos_phi' in net.load.columns:
+            net.load['sn_mva'] = net.load['sn_mva'].fillna(0)
+            net.load.loc[net.load['sn_mva'] == 0, 'sn_mva'] = net.load.apply(
+                lambda row: row['p_mw'] / row['cos_phi'], axis=1)
+        else:
+            net.load['sn_mva'] = np.sqrt(net.load['p_mw'] ** 2 + net.load['q_mvar'] ** 2)
+            # net.load['cos_phi'] = 1  # Assume cos_phi is 1 when not existing
+            # net.load['sn_mva'] = net.load['sn_mva'].fillna(0)
+            # net.load.loc[net.load['sn_mva'] == 0, 'sn_mva'] = net.load[
+            #     'p_mw']  # Use p_mw directly if cos_phi is assumed 1
+
+    # Ensure required columns are present after potential calculations
     required_columns = ['sn_mva', 'p_mw', 'q_mvar']
+
     for column in required_columns:
         if column not in net.load.columns:
             print(f"Ensure that '{column}' column exists in net.load DataFrame")
@@ -359,7 +473,7 @@ def calculate_load_disparity(net):
     # Prepare data for disparity calculation
     load_data = net.load[['sn_mva', 'p_mw', 'q_mvar']].copy()
 
-        # Select relevant columns for disparity calculation
+    # Select relevant columns for disparity calculation
     load_data = load_data[['p_mw', 'q_mvar', 'sn_mva']]
 
     # Calculate disparity matrix (Euclidean distance between load characteristics)
@@ -376,37 +490,21 @@ def calculate_load_disparity(net):
     # Convert to DataFrame for easier handling
     disparity_df = pd.DataFrame(disparity_matrix, index=load_data.index, columns=load_data.index)
 
-    # # Visualize the disparity matrix
-    # plt.figure(figsize=(10, 8))
-    # sns.heatmap(disparity_df, cmap='viridis', annot=True, fmt='.2f')
-    # plt.title('Disparity Space for Loads (5D)')
-    # plt.xlabel('Load Index')
-    # plt.ylabel('Load Index')
-    # plt.show()
-
-    return disparity_df
-
-def calculate_theoretical_max_disparity_load(load_data):
-    # Prepare data for disparity calculation
-    load_data = net.load[['sn_mva', 'p_mw', 'q_mvar']].copy()
-
     max_p = load_data['p_mw'].max()
     max_q = load_data['q_mvar'].max()
     max_sn = load_data['sn_mva'].max()
-    max_disparity = np.sqrt(max_p**2 + max_q**2 + max_sn**2 )
+    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_sn ** 2)
     n = len(load_data)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
 
-    return max_integral_value
-
+    return disparity_df, max_integral_value
 
 # Calculate disparity space for loads
-disparity_df_load = calculate_load_disparity(net)
+disparity_df_load, max_integral_load = calculate_load_disparity(net)
 #print(disparity_df_load)
 
 # Compute the integral (sum) over the entire DataFrame
 integral_value_load = disparity_df_load.values.sum()
-max_integral_load = calculate_theoretical_max_disparity_load(net.load)
 print(f"Disparity Integral Loads: {integral_value_load}")
 print(f"Disparity Integral max Loads: {max_integral_load }")
 
@@ -561,7 +659,11 @@ add_disparity('Lines',integral_value_line,max_int_disp_lines,integral_value_line
 
 print(ddisparity)
 
-add_indicator('Disparity',ddisparity['Verhaeltnis'].mean())
+add_indicator('Disparity Generators',ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
+add_indicator('Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
+add_indicator('Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
+add_indicator('Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
+#add_indicator('Disparity',ddisparity['Verhaeltnis'].mean())
 
 def count_elements(net):
     counts = {
@@ -750,10 +852,12 @@ def plot_spider_chart(df, title="Resilience Score"):
     ax.text(centroid_x, centroid_y, f'{area:.2f}', horizontalalignment='center', verticalalignment='center', fontsize=12, color='black')
 
     # Title and legend
-    plt.title(title, size=20, color='b', y=1.1)
+    plt.title(f"{title} (Area: {area:.2f})", size=20, color='b', y=1.1)
     plt.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
 
     plt.show()
 
 plot_spider_chart(dfinalresults)
+# Save the DataFrame to an Excel file
+dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
 print(dfinalresults)
