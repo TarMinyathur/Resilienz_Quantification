@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-net = pn.create_cigre_network_lv()
-#net = pn.create_cigre_network_mv(False)
+#net = pn.create_cigre_network_lv()
+net = pn.create_cigre_network_mv(False)
 # False, 'pv_wind', 'all'
 
 '''
@@ -77,11 +77,8 @@ for idx, line in net.line.iterrows():
 
     # Only add the edge if there is no switch or if the switch is closed
     if not switch_exists or (switch_exists and switch_closed):
-        G.add_edge(from_bus, to_bus)
-
-# # Add edges from Pandapower network
-# for idx, line in net.line.iterrows():
-#     G.add_edge(line.from_bus, line.to_bus)
+        length = line.length_km
+        G.add_edge(from_bus, to_bus, weight=length)
 
 def count_elements(net):
     counts = {
@@ -132,7 +129,9 @@ if G.number_of_nodes() > 1:
 else:
     print("Graph has only one node, cannot calculate average shortest path length.")
 
-norm_avg_pl = avg_path_length / G.number_of_nodes()
+num_nodes = G.number_of_nodes()
+num_nodes = (num_nodes - 1) if num_nodes > 1 else 0
+norm_avg_pl = max(0, 1 - (avg_path_length / num_nodes ))
 print(f"Datatype of norm_avg_pl: {type(norm_avg_pl)}")
 print(f"Normalized Average Path Length: {norm_avg_pl}")
 add_indicator('Average Shortest Path Length',norm_avg_pl)
