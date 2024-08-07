@@ -1,17 +1,19 @@
 import pandapower as pp
 import pandapower.networks as pn
-import itertools
-import math
+#import itertools
+#import math
 import networkx as nx
 from networkx.algorithms import community
-import numpy as np
+#import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from count_elements import count_elements
 from modularity import calculate_modularity_index
 from diversity import calculate_shannon_evenness_and_variety
-from disparity import calculate_disparity_space
+from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, calculate_load_disparity
 from GenerationFactors import calculate_generation_factors
+from Redundancy import n_3_redundancy_check
+from visualize import plot_spider_chart
 
 #net = pn.create_cigre_network_lv()
 net = pn.create_cigre_network_mv(False)
@@ -230,67 +232,6 @@ print(f"Disparity Integral max Loads: {max_integral_gen}")
 
 add_disparity('Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
 
-def calculate_load_disparity(net):
-    # Ensure load DataFrame has the required columns
-    # Ensure the required columns exist
-    if 'p_mw' not in net.load.columns or 'q_mvar' not in net.load.columns:
-        # Calculate missing p_mw and q_mvar if cos_phi and mode are available
-        if 'cos_phi' in net.load.columns and 'mode' in net.load.columns:
-            net.load['p_mw'] = net.load.apply(lambda row: row['sn_mva'] * row['cos_phi'], axis=1)
-            net.load['q_mvar'] = net.load.apply(lambda row: row['sn_mva'] * np.sqrt(1 - row['cos_phi'] ** 2), axis=1)
-        else:
-            raise ValueError("Missing required columns and unable to calculate due to missing cos_phi or mode.")
-
-    # Replace missing sn_mva or NaN with zero and calculate if necessary
-    if 'sn_mva' not in net.load.columns or net.load['sn_mva'].isnull().any():
-        if 'cos_phi' in net.load.columns:
-            net.load['sn_mva'] = net.load['sn_mva'].fillna(0)
-            net.load.loc[net.load['sn_mva'] == 0, 'sn_mva'] = net.load.apply(
-                lambda row: row['p_mw'] / row['cos_phi'], axis=1)
-        else:
-            net.load['sn_mva'] = np.sqrt(net.load['p_mw'] ** 2 + net.load['q_mvar'] ** 2)
-            # net.load['cos_phi'] = 1  # Assume cos_phi is 1 when not existing
-            # net.load['sn_mva'] = net.load['sn_mva'].fillna(0)
-            # net.load.loc[net.load['sn_mva'] == 0, 'sn_mva'] = net.load[
-            #     'p_mw']  # Use p_mw directly if cos_phi is assumed 1
-
-    # Ensure required columns are present after potential calculations
-    required_columns = ['sn_mva', 'p_mw', 'q_mvar']
-
-    for column in required_columns:
-        if column not in net.load.columns:
-            print(f"Ensure that '{column}' column exists in net.load DataFrame")
-            return None
-
-    # Prepare data for disparity calculation
-    load_data = net.load[['sn_mva', 'p_mw', 'q_mvar']].copy()
-
-    # Select relevant columns for disparity calculation
-    load_data = load_data[['p_mw', 'q_mvar', 'sn_mva']]
-
-    # Calculate disparity matrix (Euclidean distance between load characteristics)
-    n = len(load_data)
-    disparity_matrix = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt((load_data.p_mw.iloc[i] - load_data.p_mw.iloc[j]) ** 2 +
-                                                 (load_data.q_mvar.iloc[i] - load_data.q_mvar.iloc[j]) ** 2 +
-                                                 (load_data.sn_mva.iloc[i] - load_data.sn_mva.iloc[j]) ** 2 )
-
-    # Convert to DataFrame for easier handling
-    disparity_df = pd.DataFrame(disparity_matrix, index=load_data.index, columns=load_data.index)
-
-    max_p = load_data['p_mw'].max()
-    max_q = load_data['q_mvar'].max()
-    max_sn = load_data['sn_mva'].max()
-    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_sn ** 2)
-    n = len(load_data)
-    max_integral_value = (n * (n - 1) / 2) * max_disparity
-
-    return disparity_df, max_integral_value
-
 # Calculate disparity space for loads
 disparity_df_load, max_integral_load = calculate_load_disparity(net)
 #print(disparity_df_load)
@@ -302,64 +243,6 @@ print(f"Disparity Integral max Loads: {max_integral_load }")
 
 add_disparity('Load', integral_value_load, max_integral_load, integral_value_load/ max_integral_load)
 
-def calculate_transformer_disparity(net):
-    # Ensure that transformer has the required columns
-    required_columns = ['sn_mva', 'vn_hv_kv', 'vn_lv_kv', 'vkr_percent',
-                        'vk_percent', 'pfe_kw', 'i0_percent', 'shift_degree']
-    for column in required_columns:
-        if column not in net.trafo.columns:
-            print(f"Ensure that '{column}' column exists in net.trafo")
-            return None
-
-    # Combine the metrics into a single dataframe
-    trafo_data = net.trafo[required_columns]
-
-    # Create disparity matrix (Euclidean distance between combined metrics)
-    n = len(trafo_data)
-    disparity_matrix = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt(
-                    (trafo_data.sn_mva.iloc[i] - trafo_data.sn_mva.iloc[j]) ** 2 +
-                    (trafo_data.vn_hv_kv.iloc[i] - trafo_data.vn_hv_kv.iloc[j]) ** 2 +
-                    (trafo_data.vn_lv_kv.iloc[i] - trafo_data.vn_lv_kv.iloc[j]) ** 2 +
-                    (trafo_data.vkr_percent.iloc[i] - trafo_data.vkr_percent.iloc[j]) ** 2 +
-                    (trafo_data.vk_percent.iloc[i] - trafo_data.vk_percent.iloc[j]) ** 2 +
-                    (trafo_data.pfe_kw.iloc[i] - trafo_data.pfe_kw.iloc[j]) ** 2 +
-                    (trafo_data.i0_percent.iloc[i] - trafo_data.i0_percent.iloc[j]) ** 2 +
-                    (trafo_data.shift_degree.iloc[i] - trafo_data.shift_degree.iloc[j]) ** 2
-                )
-
-    # Convert to DataFrame for easier handling
-    disparity_df = pd.DataFrame(disparity_matrix, index=trafo_data.index, columns=trafo_data.index)
-
-    # max disparity
-    max_sn = trafo_data['sn_mva'].max()
-    max_vnhv = trafo_data['vn_hv_kv'].max()
-    max_vnlv = trafo_data['vn_lv_kv'].max()
-    max_vkr = trafo_data['vkr_percent'].max()
-    max_vk = trafo_data['vk_percent'].max()
-    max_pfe = trafo_data['pfe_kw'].max()
-    max_i0 = trafo_data['i0_percent'].max()
-    max_sh = trafo_data['shift_degree'].max()
-
-    max_disparity = np.sqrt(max_sn ** 2 + max_vnhv ** 2 + max_vnlv **2 + max_vkr **2 + max_vk **2 + max_pfe **2 + max_i0 **2 + max_sh **2)
-    n = len(trafo_data)
-    max_integral_value = (n * (n - 1) / 2) * max_disparity
-
-    # # Visualize the disparity matrix
-    # plt.figure(figsize=(10, 8))
-    # sns.heatmap(disparity_df, cmap='viridis', annot=True, fmt='.2f')
-    # plt.title('Disparity Space for Transformers')
-    # plt.xlabel('Transformer Index')
-    # plt.ylabel('Transformer Index')
-    # plt.show()
-
-    return disparity_df,max_integral_value
-
-
 # Calculate disparity space for transformers
 disparity_df_trafo,max_int_trafo = calculate_transformer_disparity(net)
 #print(disparity_df_trafo)
@@ -370,74 +253,6 @@ print(f"Disparity Integral Transformers: {integral_value_trafo}")
 print(f"max theoretical Disparity Integral Transformers: {max_int_trafo}")
 
 add_disparity('Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
-
-def normalize_categorical(data):
-    """
-    Normalizes categorical data to numeric values starting from 0.
-    """
-    unique_values = data.unique()
-    value_map = {value: idx for idx, value in enumerate(unique_values)}
-    return data.map(value_map)
-
-
-def calculate_line_disparity(net):
-    # Ensure that line has the required columns
-    required_columns = ['length_km', 'from_bus', 'to_bus', 'type', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']
-    for column in required_columns:
-        if column not in net.line.columns:
-            print(f"Ensure that '{column}' column exists in net.line")
-            return None
-
-    net.line['from_bus_norm'] = normalize_categorical(net.line['from_bus'])
-    net.line['to_bus_norm'] = normalize_categorical(net.line['to_bus'])
-    net.line['cable_type_norm'] = normalize_categorical(net.line['type'])
-
-    # Combine the metrics into a single dataframe
-    line_data = net.line[['length_km', 'from_bus_norm', 'to_bus_norm', 'cable_type_norm', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']]
-
-    # Create disparity matrix (Euclidean distance between combined metrics)
-    n = len(line_data)
-    disparity_matrix = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt(
-                    (line_data.length_km.iloc[i] - line_data.length_km.iloc[j]) ** 2 +
-                    (line_data.from_bus_norm.iloc[i] - line_data.from_bus_norm.iloc[j]) ** 2 +
-                    (line_data.to_bus_norm.iloc[i] - line_data.to_bus_norm.iloc[j]) ** 2 +
-                    (line_data.cable_type_norm.iloc[i] - line_data.cable_type_norm.iloc[j]) ** 2 +
-                    (line_data.r_ohm_per_km.iloc[i] - line_data.r_ohm_per_km.iloc[j]) ** 2 +
-                    (line_data.x_ohm_per_km.iloc[i] - line_data.x_ohm_per_km.iloc[j]) ** 2 +
-                    (line_data.max_i_ka.iloc[i] - line_data.max_i_ka.iloc[j]) ** 2
-                )
-
-    # Convert to DataFrame for easier handling
-    disparity_df = pd.DataFrame(disparity_matrix, index=line_data.index, columns=line_data.index)
-
-    # Print both counts in one row
-    print("Bus | Original | Normed ")
-    print("-" * 45)
-    for k in range(len(net.line)):
-        normed = net.line['to_bus_norm'][k]
-        original = net.line['to_bus'][k]
-        print(f"{k:<12} | {original:<14} | {normed:<20}")
-
-    # max disparity
-    max_length = net.line['length_km'].max()
-    max_fbm = net.line['from_bus_norm'].max()
-    max_tbm = net.line['to_bus_norm'].max()
-    max_ctn = net.line['cable_type_norm'].max()
-    max_ohm = net.line['r_ohm_per_km'].max()
-    max_xohm = net.line['x_ohm_per_km'].max()
-    max_ika = net.line['max_i_ka'].max()
-
-    max_disparity = np.sqrt(max_length ** 2 + max_fbm ** 2 + max_tbm **2 + max_ctn **2 + max_ohm **2 + max_xohm **2 + max_ika **2)
-    n = len(net.line)
-    max_integral_value = (n * (n - 1) / 2) * max_disparity
-
-    return disparity_df,max_integral_value
-
 
 # Calculate disparity space for lines
 disparity_df_lines,max_int_disp_lines = calculate_line_disparity(net)
@@ -472,100 +287,8 @@ def count_elements(net):
 element_counts = count_elements(net)
 element_counts["scaled_counts"] = {k: int(v * 0.3) for k, v in element_counts.items()}
 
-def is_graph_connected(net, out_of_service_elements):
-    # Create NetworkX graph manually
-    G = nx.Graph()
-
-    # Add buses
-    for bus in net.bus.itertuples():
-        if bus.Index not in out_of_service_elements.get('line', []):
-            G.add_nodes_from(net.bus.index)
-
-    # Add lines
-    for line in net.line.itertuples():
-        if line.Index not in out_of_service_elements.get('line', []):
-            #G.add_edge(line.from_bus, line.to_bus)
-            for idx, line in net.line.iterrows():
-                from_bus = line.from_bus
-                to_bus = line.to_bus
-
-                # Check if there is a switch between from_bus and to_bus
-                switch_exists = False
-                for _, switch in net.switch.iterrows():
-                    if switch.bus == from_bus and switch.element == to_bus and switch.et == 'l':
-                        switch_exists = True
-                        switch_closed = switch.closed
-                        break
-                    elif switch.bus == to_bus and switch.element == from_bus and switch.et == 'l':
-                        switch_exists = True
-                        switch_closed = switch.closed
-                        break
-
-                # Only add the edge if there is no switch or if the switch is closed
-                if not switch_exists or (switch_exists and switch_closed):
-                    G.add_edge(from_bus, to_bus)
-
-    # Add transformers
-    for trafo in net.trafo.itertuples():
-        if trafo.Index not in out_of_service_elements.get('trafo', []):
-            G.add_edge(trafo.hv_bus, trafo.lv_bus)
-
-    # Check if the graph is still connected
-    return nx.is_connected(G)
-
-def n_3_redundancy_check(net):
-    results = {
-        "line": {"Success": 0, "Failed": 0},
-        "switch": {"Success": 0, "Failed": 0},
-        "load": {"Success": 0, "Failed": 0},
-        "sgen": {"Success": 0, "Failed": 0},
-        "trafo": {"Success": 0, "Failed": 0},
-        "bus": {"Success": 0, "Failed": 0},
-        "storage": {"Success": 0, "Failed": 0}
-    }
-
-    # Create combinations of three elements for each type
-    element_triples = {
-        "line": list(itertools.combinations(net.line.index, min(3, element_counts["scaled_counts"]["line"]))),
-    #    "switch": list(itertools.combinations(net.switch.index, min(3, element_counts["scaled_counts"]["switch"]))),
-    #    "load": list(itertools.combinations(net.load.index, min(3, element_counts["scaled_counts"]["load"]))),
-        "sgen": list(itertools.combinations(net.sgen.index, min(3, element_counts["scaled_counts"]["sgen"]))),
-        "trafo": list(itertools.combinations(net.trafo.index, min(1, element_counts["scaled_counts"]["trafo"]))),
-        "bus": list(itertools.combinations(net.bus.index, min(3, element_counts["scaled_counts"]["bus"]))),
-        "storage": list(itertools.combinations(net.storage.index, min(1, element_counts["scaled_counts"]["storage"])))
-    }
-
-    # Function to process each triple and update results
-    def process_triples(element_type, triples):
-        for triple in triples:
-            # Create a copy of the network to simulate the failures
-            net_temp = net.deepcopy()
-
-            # Set the elements out of service
-            out_of_service_elements = {element_type: triple}
-            for element_id in triple:
-                net_temp[element_type].at[element_id, 'in_service'] = False
-
-            # Check if the grid is still connected
-            if not is_graph_connected(net_temp, out_of_service_elements):
-                results[element_type]["Failed"] += 1
-                continue
-
-            # Run the load flow calculation
-            try:
-                pp.runpp(net_temp, calculate_voltage_angles=True, tolerance_mva=1e-10)
-                results[element_type]["Success"] += 1
-            except:
-                results[element_type]["Failed"] += 1
-
-    # Process each element type
-    for element_type, triples in element_triples.items():
-        process_triples(element_type, triples)
-
-    return results
-
 # Perform N-3 redundancy check
-n3_redundancy_results = n_3_redundancy_check(net)
+n3_redundancy_results = n_3_redundancy_check(net,element_counts)
 
 # Initialize Success and Failed counters
 Success = 0
@@ -581,73 +304,6 @@ for element_type, counts in n3_redundancy_results.items():
     print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
 
 add_indicator('Overall 70% Redundancy', rate)
-
-def calculate_polygon_area(values, angles):
-    """
-    Calculate the area of a polygon using the Shoelace formula.
-    """
-    x = np.cos(angles) * values
-    y = np.sin(angles) * values
-    area = 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
-    return area
-
-def calculate_polygon_centroid(values, angles):
-    """
-    Calculate the centroid (center of mass) of a polygon defined by its vertices.
-    """
-    x = np.cos(angles) * values
-    y = np.sin(angles) * values
-    area = calculate_polygon_area(values, angles)
-    cx = np.dot(x, np.roll(y, 1)) + np.dot(np.roll(x, 1), y)
-    cy = np.dot(y, np.roll(x, 1)) + np.dot(np.roll(y, 1), x)
-    centroid_x = cx / (6 * area)
-    centroid_y = cy / (6 * area)
-    return centroid_x, centroid_y
-
-def plot_spider_chart(df, title="Resilience Score"):
-    num_vars = len(df)
-    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
-    angles += angles[:1]  # Complete the loop
-
-    values = df['Value'].tolist()
-    values += values[:1]  # Complete the loop
-
-    # Calculate the area of the polygon
-    area = calculate_polygon_area(df['Value'], angles[:-1])
-
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
-
-    # Draw one axe per variable and add labels
-    ax.set_theta_offset(np.pi / 2)
-    ax.set_theta_direction(-1)
-    plt.xticks(angles[:-1], df['Indicator'], color='grey', size=12)
-
-    # Draw y-labels
-    ax.set_rscale('linear')
-    plt.yticks([0.2, 0.4, 0.6, 0.8, 1.0], ["0.2", "0.4", "0.6", "0.8", "1.0"], color="grey", size=7)
-    plt.ylim(0, 1)
-
-    # Plot data
-    ax.plot(angles, values, linewidth=1, linestyle='solid', label='Resilience Score', color='b')
-    ax.fill(angles, values, 'b', alpha=0.1)
-
-    # Add text annotations for each value
-    for i in range(num_vars):
-        angle_rad = angles[i]
-        value = df['Value'][i]
-        ax.text(angle_rad, value + 0.05, f'{value:.2f}', horizontalalignment='center', size=10, color='black')
-
-    # Calculate centroid of the polygon
-    centroid_x, centroid_y = calculate_polygon_centroid(values, angles)
-
-    # Display the area at the centroid of the polygon
-    ax.text(centroid_x, centroid_y, f'{area:.2f}', horizontalalignment='center', verticalalignment='center', fontsize=12, color='black')
-
-    # Title and legend
-    plt.title(f"{title} (Area: {area:.2f})", size=20, color='b', y=1.1)
-    plt.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
-
-    plt.show()
 
 plot_spider_chart(dfinalresults)
 # Save the DataFrame to an Excel file
