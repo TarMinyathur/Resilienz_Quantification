@@ -7,6 +7,11 @@ from networkx.algorithms import community
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from count_elements import count_elements
+from modularity import calculate_modularity_index
+from diversity import calculate_shannon_evenness_and_variety
+from disparity import calculate_disparity_space
+from GenerationFactors import calculate_generation_factors
 
 #net = pn.create_cigre_network_lv()
 net = pn.create_cigre_network_mv(False)
@@ -80,32 +85,6 @@ for idx, line in net.line.iterrows():
         length = line.length_km
         G.add_edge(from_bus, to_bus, weight=length)
 
-def count_elements(net):
-    counts = {
-        "switch": len(net.switch),
-        "load": len(net.load),
-        "sgen": len(net.sgen),
-        "line": len(net.line),
-        "trafo": len(net.trafo),
-        "bus": len(net.bus),
-        "storage": len(net.storage) if "storage" in net else 0  # Handle networks without storage elements
-    }
-
-    # Multiply counts by 0.3 and round down
-    scaled_counts = {}
-    for element_type, count in counts.items():
-        scaled_count = math.floor(count * 0.3)
-        scaled_counts[element_type] = scaled_count
-
-    # Create a dictionary containing both counts and scaled counts
-    element_counts = {
-        "original_counts": counts,
-        "scaled_counts": scaled_counts
-    }
-
-    return element_counts
-
-
 # Count elements and scaled elements
 element_counts = count_elements(net)
 
@@ -149,25 +128,6 @@ for node, centrality in degree_centrality.items():
 print(f"\nAverage Degree Centrality: {avg_degree_centrality}")
 
 add_indicator('Average Degree Centrality',max(0,avg_degree_centrality))
-
-def calculate_modularity_index(G, communities):
-    modularity_index = 0.0
-
-    # Calculate total number of edges in the graph
-    total_edges = G.number_of_edges()
-
-    # Calculate modularity components for each community
-    for community_nodes in communities:
-        # Calculate e_ii: Fraction of edges within the community
-        e_ii = sum(1 for u, v in G.edges(community_nodes) if v in community_nodes) / total_edges
-
-        # Calculate a_i: Total fraction of edges from nodes in the community
-        a_i = sum(1 for u, v in G.edges(community_nodes) if v not in community_nodes) / total_edges
-
-        # Calculate (e_ii - a_i)^2 and accumulate to modularity index
-        modularity_index += (e_ii - a_i) ** 2
-
-    return modularity_index
 
 # Detect communities (optional): Using Louvain method
 communities = community.greedy_modularity_communities(G)
@@ -221,39 +181,6 @@ print(f" self sufficiency: {selfsuff}")
 add_indicator('self sufficiency at bus level',selfsuff)
 
 
-def calculate_shannon_evenness_and_variety(data, max_known_types):
-    """
-    Calculate Shannon evenness and variety for a given DataFrame based on the 'type' attribute.
-
-    :param data: The DataFrame containing the component data
-    :param max_known_types: The maximum number of known types for the component
-    :return: Tuple of (Shannon evenness, variety)
-    """
-    if 'type' in data.columns:
-        component_types = data['type'].value_counts()
-    else:
-        print("No 'type' column found in the data")
-        return None, None
-
-    # Calculate the proportion of each type
-    total_components = len(data)
-    proportions = component_types / total_components
-
-    # Calculate the Shannon entropy
-    shannon_entropy = -np.sum(proportions * np.log(proportions))
-
-    # Calculate the Shannon evenness
-    max_entropy = np.log(len(component_types))
-    shannon_evenness = shannon_entropy / max_entropy if max_entropy > 0 else 0
-
-    # Calculate the variety
-    variety = len(component_types)
-    max_variety = max_known_types
-    variety_scaled = variety / max_variety
-
-    return shannon_evenness, variety, variety_scaled, max_variety
-
-
 # Define the maximum known types for each component
 max_known_types = {
     'generation': 8,  # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
@@ -289,140 +216,6 @@ add_indicator("Load Variety", variety_scaled)
 #add_indicator("Load Max Variety", max_variety)
     # add_indicator('Shannon Evenness',shannon_evenness)
     # add_indicator('Variety',Variety)
-
-
-def calculate_disparity_space(net, generation_factors):
-    # Ensure that sgen, gen, and storage have the required columns
-    required_columns_sgen_storage = ['bus', 'p_mw', 'q_mvar', 'sn_mva', 'type']
-    required_columns_gen = ['bus', 'p_mw', 'sn_mva', 'type']
-
-    # Ensure required columns and set NaN or missing values to 0
-    for df_name in ['sgen', 'storage', 'gen']:
-        df = getattr(net, df_name)
-        for col in ['p_mw', 'q_mvar', 'sn_mva']:
-            if col not in df.columns:
-                df[col] = 0
-            else:
-                df[col] = df[col].fillna(0)
-
-    # Check for missing 'type' column and add if missing
-    for df_name in ['sgen', 'storage', 'gen']:
-        df = getattr(net, df_name)
-        if 'type' not in df.columns:
-            df['type'] = 'default'  # You can change 'default' to any default type you prefer
-
-    # Sum p_mw, q_mvar, and sn_mva*generation_factor over all sgen at each bus
-    if not net.sgen.empty:
-        net.sgen['effective_sn_mva'] = net.sgen.apply(
-            lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        sgen_sums = net.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
-    else:
-        sgen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
-
-    # Sum p_mw, q_mvar, and sn_mva*generation_factor over all storage at each bus
-    if not net.storage.empty:
-        net.storage['effective_sn_mva'] = net.storage.apply(
-            lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        storage_sums = net.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
-    else:
-        storage_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
-
-    # Sum p_mw and sn_mva*generation_factor over all gen at each bus
-    if not net.gen.empty:
-        net.gen['effective_sn_mva'] = net.gen.apply(lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1),
-                                                    axis=1)
-        gen_sums = net.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
-        gen_sums['q_mvar'] = 0  # Add a zero q_mvar column to match other dataframes
-    else:
-        gen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
-
-    print(gen_sums)
-    print(sgen_sums)
-    print(storage_sums)
-
-    # Merge the sums from sgen, storage, and gen
-    total_sums = pd.merge(sgen_sums, storage_sums, on='bus', how='outer', suffixes=('_sgen', '_storage')).fillna(0)
-    total_sums = pd.merge(total_sums, gen_sums, on='bus', how='outer', suffixes=('', '_gen')).fillna(0)
-
-    print(total_sums)
-
-    # Sum the relevant columns
-    total_sums['p_mw'] = total_sums['p_mw'] + total_sums.get('p_mw_storage', 0) + total_sums.get('p_mw_gen', 0)
-    total_sums['q_mvar'] = total_sums['q_mvar'] + total_sums.get('q_mvar_storage', 0) + total_sums.get('q_mvar_gen', 0)
-    total_sums['effective_sn_mva'] = (total_sums['effective_sn_mva'] + total_sums.get('effective_sn_mva_storage', 0) + total_sums.get('effective_sn_mva_gen', 0))
-    total_sums['sn_mva'] = total_sums['sn_mva'] + total_sums.get('sn_mva_storage', 0) + total_sums.get('sn_mva_gen', 0)
-
-    print(total_sums)
-
-    # Select only the relevant columns
-    total_sums = total_sums[['bus', 'p_mw_sgen', 'q_mvar_sgen', 'effective_sn_mva_sgen', 'sn_mva_sgen']]
-    total_sums = total_sums.rename(columns={
-        'p_mw_sgen': 'p_mw',
-        'q_mvar_sgen': 'q_mvar',
-        'effective_sn_mva_sgen': 'effective_sn_mva',
-        'sn_mva_sgen': 'sn_mva'
-    })
-
-    print(total_sums)
-
-    # Create disparity matrix (Euclidean distance between summed p_mw, q_mvar, and effective_sn_mva)
-    n = len(total_sums)
-    disparity_matrix = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt(
-                    (total_sums.p_mw.iloc[i] - total_sums.p_mw.iloc[j]) ** 2 +
-                    (total_sums.q_mvar.iloc[i] - total_sums.q_mvar.iloc[j]) ** 2 +
-                    (total_sums.effective_sn_mva.iloc[i] - total_sums.effective_sn_mva.iloc[j]) ** 2 +
-                    (total_sums.sn_mva.iloc[i] - total_sums.sn_mva.iloc[j]) ** 2
-                )
-
-    # Convert to DataFrame for easier handling
-    disparity_df = pd.DataFrame(disparity_matrix, index=total_sums.bus, columns=total_sums.bus)
-
-    # Calculate maximum disparity
-    max_p = total_sums['p_mw'].max()
-    max_q = total_sums['q_mvar'].max()
-    max_sn = total_sums['sn_mva'].max()
-    max_eff = total_sums['effective_sn_mva'].max()
-    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_eff ** 2 + max_sn ** 2)
-
-
-    # Calculate theoretical maximum integral value of disparity
-    max_integral_value = (n * (n - 1) / 2) * max_disparity
-    max_integral_value = max(1, max_integral_value)
-
-    return disparity_df, max_integral_value
-
-def calculate_generation_factors(net):
-    # Initialize generation factors
-    generation_factors = {}
-
-    # Calculate for static generators (sgen)
-    sgen_types = net.sgen['type'].unique()
-    for sgen_type in sgen_types:
-        if sgen_type == 'pv':
-            generation_factors[sgen_type] = 0.15  # Example factor
-        elif sgen_type == 'wind':
-            generation_factors[sgen_type] = 0.25  # Example factor
-        elif sgen_type == 'biomass':
-            generation_factors[sgen_type] = 0.8  # Example factor
-        elif sgen_type == 'Residential fuel cell':
-            generation_factors[sgen_type] = 1  # Example factor
-        elif sgen_type == 'CHP diesel':
-            generation_factors[sgen_type] = 1  # Example factor
-        elif sgen_type == 'Fuel cell':
-            generation_factors[sgen_type] = 1  # Example factor
-
-    # Calculate for batteries (storage)
-    for idx, row in net.storage.iterrows():
-        capacity = row['sn_mva']
-        p_mw = row['p_mw']
-        generation_factors['battery'] = (capacity / p_mw) / 24 if p_mw != 0 else 0
-
-    return generation_factors
 
 # Calculate generation factors
 generation_factors = calculate_generation_factors(net)
