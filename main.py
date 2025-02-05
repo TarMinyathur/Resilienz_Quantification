@@ -51,11 +51,13 @@ ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 # Function to add data to the DataFrame
 def add_indicator(indicator_name, value):
     global dfinalresults
-    dfinalresults = dfinalresults.append({'Indicator': indicator_name, 'Value': value}, ignore_index=True)
+    new_row = pd.DataFrame([{'Indicator': indicator_name, 'Value': value}])
+    dfinalresults = pd.concat([dfinalresults, new_row], ignore_index=True)
 
 def add_disparity(indicator_name, value, max_value, verhaeltnis):
     global ddisparity
-    ddisparity = ddisparity.append({'Indicator': indicator_name, 'Value': value, 'max Value': max_value, 'Verhaeltnis': verhaeltnis}, ignore_index=True)
+    new_row = pd.DataFrame([{'Indicator': indicator_name, 'Value': value, 'max Value': max_value, 'Verhaeltnis': verhaeltnis}])
+    ddisparity = pd.concat([ddisparity, new_row], ignore_index=True)
 
 # Convert Pandapower network to NetworkX graph
 #G = pp.to_networkx(net)
