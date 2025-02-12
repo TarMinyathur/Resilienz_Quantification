@@ -1,4 +1,4 @@
-#indi_gt: indicators for graph theory
+#indi_gt: indicators from graph theory
 
 import networkx as nx
 from initialize import add_indicator

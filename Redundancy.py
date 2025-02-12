@@ -4,7 +4,8 @@ import pandapower as pp
 import itertools
 import networkx as nx
 
-
+# Idee: Redundanz über senken von max external messen?
+# generell: max ext grid = Summe Erzeugung?
 def n_3_redundancy_check(net, element_counts):
     results = {
         "line": {"Success": 0, "Failed": 0},
@@ -45,7 +46,13 @@ def n_3_redundancy_check(net, element_counts):
 
             # Run the load flow calculation
             try:
-                pp.runpp(net_temp, calculate_voltage_angles=True, tolerance_mva=1e-10)
+                pp.runopp(
+                    net_temp,
+                    calculate_voltage_angles=True,  # Compute voltage angles
+                    enforce_q_lims=True,  # Enforce reactive power (Q) limits
+                    distributed_slack=True  # Distribute slack among multiple sources
+                )
+                # Version1: pp.runpp(net_temp, calculate_voltage_angles=True, tolerance_mva=1e-10)
                 results[element_type]["Success"] += 1
             except:
                 results[element_type]["Failed"] += 1

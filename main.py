@@ -12,21 +12,17 @@ from disparity import calculate_disparity_space, calculate_line_disparity, calcu
 from GenerationFactors import calculate_generation_factors
 from Redundancy import n_3_redundancy_check
 from visualize import plot_spider_chart
-from initialize import set_storage_max_e_mwh
 from initialize import add_indicator
 from initialize import add_disparity
 from indi_gt import GraphenTheorieIndicator
+from adjustments import set_missing_limits
 
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 #net = pn.create_cigre_network_lv()
 net = pn.create_cigre_network_mv('all')
 # False, 'pv_wind', 'all'
 
-# Set max_e_mwh for all storage units
-set_storage_max_e_mwh(net)
-
-# Close all switches in the network
-net.switch['closed'] = True
+net = set_missing_limits(net)
 
 pp.runpp(net)
 #print(net.switch)
@@ -119,7 +115,7 @@ for bus in net.bus.index:
     else:
         misserfolg += 1
 
-
+# selfsuff über subgraphs und conversion of loadflow? → slack bus notwendig
 selfsuff = erfolg / (erfolg + misserfolg)
 print(f" self sufficiency: {selfsuff}")
 dfinalresults = add_indicator(dfinalresults,'self sufficiency at bus level',selfsuff)
@@ -246,6 +242,9 @@ for element_type, counts in n3_redundancy_results.items():
     print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
 
 dfinalresults = add_indicator(dfinalresults,'Overall 70% Redundancy', rate)
+
+
+#Output
 
 plot_spider_chart(dfinalresults)
 # Save the DataFrame to an Excel file
