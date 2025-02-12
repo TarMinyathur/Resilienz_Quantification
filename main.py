@@ -3,37 +3,24 @@ import pandapower.networks as pn
 #import itertools
 #import math
 import networkx as nx
-from networkx.algorithms import community
 #import numpy as np
 import pandas as pd
 #import matplotlib.pyplot as plt
 from count_elements import count_elements
-from modularity import calculate_modularity_index
 from diversity import calculate_shannon_evenness_and_variety
 from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, calculate_load_disparity
 from GenerationFactors import calculate_generation_factors
 from Redundancy import n_3_redundancy_check
 from visualize import plot_spider_chart
+from initialize import set_storage_max_e_mwh
+from initialize import add_indicator
+from initialize import add_disparity
+from indi_gt import GraphenTheorieIndicator
 
+#initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 #net = pn.create_cigre_network_lv()
-net = pn.create_cigre_network_mv(False)
+net = pn.create_cigre_network_mv('all')
 # False, 'pv_wind', 'all'
-
-'''
-This pandapower network includes the following parameter tables:
-  - switch (8 elements)
-  - load (18 elements)
-  - ext_grid (1 elements)
-  - sgen (15 elements)
-  - line (15 elements)
-  - trafo (2 elements)
-  - bus (15 elements)
-  - bus_geodata (15 elements)
-'''
-#changes
-def set_storage_max_e_mwh(net):
-    for idx, storage in net.storage.iterrows():
-        net.storage.at[idx, 'max_e_mwh'] = storage['p_mw'] * 24
 
 # Set max_e_mwh for all storage units
 set_storage_max_e_mwh(net)
@@ -42,25 +29,13 @@ set_storage_max_e_mwh(net)
 net.switch['closed'] = True
 
 pp.runpp(net)
-print(net.switch)
+#print(net.switch)
 
 # Initialize an empty DataFrame
+
 dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
 ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
-# Function to add data to the DataFrame
-def add_indicator(indicator_name, value):
-    global dfinalresults
-    new_row = pd.DataFrame([{'Indicator': indicator_name, 'Value': value}])
-    dfinalresults = pd.concat([dfinalresults, new_row], ignore_index=True)
-
-def add_disparity(indicator_name, value, max_value, verhaeltnis):
-    global ddisparity
-    new_row = pd.DataFrame([{'Indicator': indicator_name, 'Value': value, 'max Value': max_value, 'Verhaeltnis': verhaeltnis}])
-    ddisparity = pd.concat([ddisparity, new_row], ignore_index=True)
-
-# Convert Pandapower network to NetworkX graph
-#G = pp.to_networkx(net)
 # Create an empty NetworkX graph
 G = nx.Graph()
 
@@ -100,48 +75,13 @@ for element_type in element_counts["original_counts"]:
     scaled_count = element_counts["scaled_counts"][element_type]
     print(f"{element_type.capitalize():<12} | {original_count:<14} | {scaled_count:<20}")
 
+#checks if G is complete connected, otherwise the largest subgraph is analyzed going forward
 if not nx.is_connected(G):
     # Get largest connected component
     largest_component = max(nx.connected_components(G), key=len)
     G = G.subgraph(largest_component).copy()
 
-# Now calculate average shortest path length for the largest connected component
-if G.number_of_nodes() > 1:
-    avg_path_length = nx.average_shortest_path_length(G)
-    print(f"Average Shortest Path Length: {avg_path_length}")
-else:
-    print("Graph has only one node, cannot calculate average shortest path length.")
-
-num_nodes = G.number_of_nodes()
-num_nodes = (num_nodes - 1) if num_nodes > 1 else 0
-norm_avg_pl = max(0, 1 - (avg_path_length / num_nodes ))
-print(f"Datatype of norm_avg_pl: {type(norm_avg_pl)}")
-print(f"Normalized Average Path Length: {norm_avg_pl}")
-add_indicator('Average Shortest Path Length',norm_avg_pl)
-
-# Calculate degree centrality
-degree_centrality = nx.degree_centrality(G)
-
-# Calculate average degree centrality
-avg_degree_centrality = sum(degree_centrality.values()) / len(degree_centrality)
-
-print(f"Degree Centrality:")
-for node, centrality in degree_centrality.items():
-    print(f"Bus {node}: {centrality}")
-
-print(f"\nAverage Degree Centrality: {avg_degree_centrality}")
-
-add_indicator('Average Degree Centrality',max(0,avg_degree_centrality))
-
-# Detect communities (optional): Using Louvain method
-communities = community.greedy_modularity_communities(G)
-
-# Calculate modularity index
-modularity_index = calculate_modularity_index(G, communities)
-
-print(f"Modularity Index (Q): {modularity_index}")
-
-add_indicator('Modularity Index',max(0,modularity_index))
+GraphenTheorieIndicator(G, dfinalresults)
 
 erfolg = 0
 misserfolg = 0
@@ -182,7 +122,7 @@ for bus in net.bus.index:
 
 selfsuff = erfolg / (erfolg + misserfolg)
 print(f" self sufficiency: {selfsuff}")
-add_indicator('self sufficiency at bus level',selfsuff)
+dfinalresults = add_indicator(dfinalresults,'self sufficiency at bus level',selfsuff)
 
 
 # Define the maximum known types for each component
@@ -199,24 +139,24 @@ generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
 evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
 print(f"Generation - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
 
-add_indicator("Generation Shannon Evenness", evenness)
-add_indicator("Generation Variety", variety_scaled)
+dfinalresults = add_indicator(dfinalresults,"Generation Shannon Evenness", evenness)
+dfinalresults = add_indicator(dfinalresults,"Generation Variety", variety_scaled)
 #add_indicator("Generation Max Variety", max_variety)
 
 # Calculate and print Shannon evenness and variety for lines
 evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
 print(f"Line - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
 
-add_indicator("Line Shannon Evenness", evenness)
-add_indicator("Line Variety", variety_scaled)
+dfinalresults = add_indicator(dfinalresults,"Line Shannon Evenness", evenness)
+dfinalresults = add_indicator(dfinalresults,"Line Variety", variety_scaled)
 #add_indicator("Line Max Variety", max_variety)
 
 # Calculate and print Shannon evenness and variety for loads
 evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
 print(f"Load - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
 
-add_indicator("Load Shannon Evenness", evenness)
-add_indicator("Load Variety", variety_scaled)
+dfinalresults = add_indicator(dfinalresults,"Load Shannon Evenness", evenness)
+dfinalresults = add_indicator(dfinalresults,"Load Variety", variety_scaled)
 #add_indicator("Load Max Variety", max_variety)
     # add_indicator('Shannon Evenness',shannon_evenness)
     # add_indicator('Variety',Variety)
@@ -232,7 +172,7 @@ integral_value_gen = disparity_df_gen.values.sum()
 print(f"Disparity Integral Generators: {integral_value_gen}")
 print(f"Disparity Integral max Loads: {max_integral_gen}")
 
-add_disparity('Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
+ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
 
 # Calculate disparity space for loads
 disparity_df_load, max_integral_load = calculate_load_disparity(net)
@@ -243,7 +183,7 @@ integral_value_load = disparity_df_load.values.sum()
 print(f"Disparity Integral Loads: {integral_value_load}")
 print(f"Disparity Integral max Loads: {max_integral_load }")
 
-add_disparity('Load', integral_value_load, max_integral_load, integral_value_load/ max_integral_load)
+ddisparity =add_disparity(ddisparity,'Load', integral_value_load, max_integral_load, integral_value_load/ max_integral_load)
 
 # Calculate disparity space for transformers
 disparity_df_trafo,max_int_trafo = calculate_transformer_disparity(net)
@@ -254,7 +194,7 @@ integral_value_trafo = disparity_df_trafo.values.sum()
 print(f"Disparity Integral Transformers: {integral_value_trafo}")
 print(f"max theoretical Disparity Integral Transformers: {max_int_trafo}")
 
-add_disparity('Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
+ddisparity = add_disparity(ddisparity,'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
 
 # Calculate disparity space for lines
 disparity_df_lines,max_int_disp_lines = calculate_line_disparity(net)
@@ -264,30 +204,30 @@ integral_value_line = disparity_df_lines.values.sum()
 print(f"Disparity Integral Lines: {integral_value_line}")
 print(f"max theoretical Disparity Integral Lines: {max_int_disp_lines}")
 
-add_disparity('Lines',integral_value_line,max_int_disp_lines,integral_value_line / max_int_disp_lines)
+ddisparity = add_disparity(ddisparity,'Lines',integral_value_line,max_int_disp_lines,integral_value_line / max_int_disp_lines)
 
 print(ddisparity)
 
-add_indicator('Disparity Generators',ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
-add_indicator('Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
-add_indicator('Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
-add_indicator('Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
-#add_indicator('Disparity',ddisparity['Verhaeltnis'].mean())
+dfinalresults = add_indicator(dfinalresults,'Disparity Generators',ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
+dfinalresults = add_indicator(dfinalresults,'Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
+dfinalresults = add_indicator(dfinalresults,'Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
+dfinalresults = add_indicator(dfinalresults,'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
+# dfinalresults = add_indicator('Disparity',ddisparity['Verhaeltnis'].mean())
 
-def count_elements(net):
-    counts = {
-        "switch": len(net.switch),
-        "load": len(net.load),
-        "sgen": len(net.sgen),
-        "line": len(net.line),
-        "trafo": len(net.trafo),
-        "bus": len(net.bus),
-        "storage": len(net.storage) if "storage" in net else 0  # Some networks might not have storage elements
-    }
-    return counts
+# def count_elements(net):
+#    counts = {
+#        "switch": len(net.switch),
+#        "load": len(net.load),
+#        "sgen": len(net.sgen),
+#        "line": len(net.line),
+#        "trafo": len(net.trafo),
+#        "bus": len(net.bus),
+#        "storage": len(net.storage) if "storage" in net else 0  # Some networks might not have storage elements
+#    }
+#    return counts
 
-element_counts = count_elements(net)
-element_counts["scaled_counts"] = {k: int(v * 0.3) for k, v in element_counts.items()}
+# element_counts = count_elements(net)
+# element_counts["scaled_counts"] = {k: int(v * 0.3) for k, v in element_counts.items()}
 
 # Perform N-3 redundancy check
 n3_redundancy_results = n_3_redundancy_check(net,element_counts)
@@ -305,7 +245,7 @@ for element_type, counts in n3_redundancy_results.items():
     rate = Success / total_checks if total_checks != 0 else 0
     print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
 
-add_indicator('Overall 70% Redundancy', rate)
+dfinalresults = add_indicator(dfinalresults,'Overall 70% Redundancy', rate)
 
 plot_spider_chart(dfinalresults)
 # Save the DataFrame to an Excel file
