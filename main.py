@@ -24,7 +24,7 @@ net = pn.create_cigre_network_mv('all')
 
 net = set_missing_limits(net)
 
-pp.runpp(net)
+#pp.runopp(net)
 #print(net.switch)
 
 # Initialize an empty DataFrame
