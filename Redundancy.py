@@ -52,7 +52,9 @@ def n_3_redundancy_check(net, element_counts):
                     enforce_q_lims=True,  # Enforce reactive power (Q) limits
                     distributed_slack=True  # Distribute slack among multiple sources
                 )
-                # Version1: pp.runpp(net_temp, calculate_voltage_angles=True, tolerance_mva=1e-10)
+
+                #Version1: (
+                #pp.runpp(net_temp, calculate_voltage_angles=True, tolerance_mva=1e-10)
                 results[element_type]["Success"] += 1
             except:
                 results[element_type]["Failed"] += 1

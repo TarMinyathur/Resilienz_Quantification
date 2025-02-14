@@ -1,4 +1,4 @@
-import pandapower as pp
+# import pandapower as pp
 import pandapower.networks as pn
 #import itertools
 #import math
@@ -16,6 +16,7 @@ from initialize import add_indicator
 from initialize import add_disparity
 from indi_gt import GraphenTheorieIndicator
 from adjustments import set_missing_limits
+from self_sufficiency import selfsuff
 
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 #net = pn.create_cigre_network_lv()
@@ -79,46 +80,9 @@ if not nx.is_connected(G):
 
 GraphenTheorieIndicator(G, dfinalresults)
 
-erfolg = 0
-misserfolg = 0
-ergebnis = 0
-
-# Check if generation meets demand on each bus
-for bus in net.bus.index:
-    generation_p = sum(net.gen[net.gen.bus == bus].p_mw) + sum(net.sgen[net.sgen.bus == bus].p_mw) \
-                   + sum(net.storage[net.storage.bus == bus].p_mw)
-    #generation_q = sum(net.gen[net.gen.bus == bus].q_mvar.fillna(0)) + sum(net.sgen[net.sgen.bus == bus].q_mvar.fillna(0))
-    generation_q = sum(net.sgen[net.sgen.bus == bus].q_mvar.fillna(0))
-    generation_s = sum((net.sgen[net.sgen.bus == bus].p_mw ** 2 + net.sgen[net.sgen.bus == bus].q_mvar ** 2) ** 0.5)
-
-    demand_p = sum(net.load[net.load.bus == bus].p_mw)
-    demand_q = sum(net.load[net.load.bus == bus].q_mvar)
-    demand_s = sum((net.load[net.load.bus == bus].p_mw ** 2 + net.load[net.load.bus == bus].q_mvar ** 2) ** 0.5)
-
-    print(f"Bus {bus}:")
-    print(f"   Active Power:   Generation = {generation_p} MW, Demand = {demand_p} MW")
-    print(f"   Reactive Power: Generation = {generation_q} Mvar, Demand = {demand_q} Mvar")
-    print(f"   Apparent Power: Generation = {generation_s} MVA, Demand = {demand_s} MVA")
-
-    if generation_p >= demand_p:
-        erfolg += 1
-    else:
-        misserfolg += 1
-
-    if generation_q >= demand_q:
-        erfolg += 1
-    else:
-        misserfolg += 1
-
-    if generation_s >= demand_s:
-        erfolg += 1
-    else:
-        misserfolg += 1
-
-# selfsuff über subgraphs und conversion of loadflow? → slack bus notwendig
-selfsuff = erfolg / (erfolg + misserfolg)
-print(f" self sufficiency: {selfsuff}")
-dfinalresults = add_indicator(dfinalresults,'self sufficiency at bus level',selfsuff)
+indi_selfsuff = float(selfsuff(net))
+print(f" self sufficiency: {indi_selfsuff}")
+dfinalresults = add_indicator(dfinalresults,'self sufficiency at bus level',indi_selfsuff)
 
 
 # Define the maximum known types for each component
@@ -153,9 +117,6 @@ print(f"Load - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {m
 
 dfinalresults = add_indicator(dfinalresults,"Load Shannon Evenness", evenness)
 dfinalresults = add_indicator(dfinalresults,"Load Variety", variety_scaled)
-#add_indicator("Load Max Variety", max_variety)
-    # add_indicator('Shannon Evenness',shannon_evenness)
-    # add_indicator('Variety',Variety)
 
 # Calculate generation factors
 generation_factors = calculate_generation_factors(net)
@@ -210,21 +171,6 @@ dfinalresults = add_indicator(dfinalresults,'Disparity Trafo',ddisparity.loc[ddi
 dfinalresults = add_indicator(dfinalresults,'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 # dfinalresults = add_indicator('Disparity',ddisparity['Verhaeltnis'].mean())
 
-# def count_elements(net):
-#    counts = {
-#        "switch": len(net.switch),
-#        "load": len(net.load),
-#        "sgen": len(net.sgen),
-#        "line": len(net.line),
-#        "trafo": len(net.trafo),
-#        "bus": len(net.bus),
-#        "storage": len(net.storage) if "storage" in net else 0  # Some networks might not have storage elements
-#    }
-#    return counts
-
-# element_counts = count_elements(net)
-# element_counts["scaled_counts"] = {k: int(v * 0.3) for k, v in element_counts.items()}
-
 # Perform N-3 redundancy check
 n3_redundancy_results = n_3_redundancy_check(net,element_counts)
 
@@ -248,5 +194,5 @@ dfinalresults = add_indicator(dfinalresults,'Overall 70% Redundancy', rate)
 
 plot_spider_chart(dfinalresults)
 # Save the DataFrame to an Excel file
-dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
+# dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
 print(dfinalresults)
