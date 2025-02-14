@@ -48,6 +48,7 @@ def n_3_redundancy_check(net, element_counts):
             try:
                 pp.runopp(
                     net_temp,
+                    init="pf",
                     calculate_voltage_angles=True,  # Compute voltage angles
                     enforce_q_lims=True,  # Enforce reactive power (Q) limits
                     distributed_slack=True  # Distribute slack among multiple sources

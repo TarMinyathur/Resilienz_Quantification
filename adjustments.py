@@ -3,12 +3,12 @@
 
 import pandapower as pp
 import pandas as pd
+#import pandapower.networks as pn
+#from networkx import grid_graph
 
-def set_missing_limits(net):
+#net = pn.create_cigre_network_mv(with_der="all")
 
-    # Make sure no cost functions are applied
-    if "poly_cost" in net:
-        net.poly_cost.drop(net.poly_cost.index, inplace=True)
+def set_missing_limits(net, required_p_mw, required_q_mvar):
 
     # Close all switches in the network
     net.switch['closed'] = True
@@ -35,23 +35,21 @@ def set_missing_limits(net):
             P_factor, Q_factor = 1.0, 0.7
 
         # Falls max_p_mw oder min_p_mw nicht gesetzt sind, setzen
-        if pd.isna(ext_grid.get('max_p_mw')):
+        if pd.isna(ext_grid.get('max_p_mw')) or ext_grid.get('max_p_mw') < S_max:
             net.ext_grid.at[idx, 'max_p_mw'] = S_max * P_factor
-        if pd.isna(ext_grid.get('min_p_mw')):
-            net.ext_grid.at[idx, 'min_p_mw'] = S_max * 0.5  # Sicherheitsfaktor
+        if pd.isna(ext_grid.get('min_p_mw')) or ext_grid.get('min_p_mw') < -S_max:
+            net.ext_grid.at[idx, 'min_p_mw'] = - (S_max * 0.5)  # Sicherheitsfaktor
 
         # Falls max_q_mvar oder min_q_mvar nicht gesetzt sind, setzen
-        if pd.isna(ext_grid.get('max_q_mvar')):
+        if pd.isna(ext_grid.get('max_q_mvar')) or ext_grid.get('max_p_mw') < S_max:
             net.ext_grid.at[idx, 'max_q_mvar'] = S_max * Q_factor * 0.5  # Begrenzte Q-Abgabe (+50%)
-        if pd.isna(ext_grid.get('min_q_mvar')):
-            net.ext_grid.at[idx, 'min_q_mvar'] = -S_max * Q_factor * 0.8  # Größerer Q-Bezug (-80%)
-
-        # Apply zero cost function to external grids (`ext_grid`)
-        if idx not in net.poly_cost["element"].values:
-            pp.create_poly_cost(net, element=idx, et="ext_grid", cp1_eur_per_mw=0.01)
+        if pd.isna(ext_grid.get('min_q_mvar')) or ext_grid.get('min_q_mvar') < -S_max:
+            net.ext_grid.at[idx, 'min_q_mvar'] = - (S_max * Q_factor * 0.8)  # Größerer Q-Bezug (-80%)
 
     # Optionale Info-Ausgabe
     print(f"Set limits for ext_grid at bus {bus_idx} (vn_kv={vn_kv} kV):")
+    print(f"Mindest-Netzbezug ermittelt: {required_p_mw:.2f} MW")
+    print(f"Mindest-Netzbezug ermittelt: {required_q_mvar:.2f} MVAR")
     print(f"  max_p_mw: {net.ext_grid.at[idx, 'max_p_mw']} MW")
     print(f"  min_p_mw: {net.ext_grid.at[idx, 'min_p_mw']} MW")
     print(f"  max_q_mvar: {net.ext_grid.at[idx, 'max_q_mvar']} MVAR")
@@ -86,11 +84,6 @@ def set_missing_limits(net):
             if pd.isna(gen.get('min_q_mvar')):
                 net.gen.at[idx, 'min_q_mvar'] = -0.5 * gen['p_mw']  # Absorbs Q from the grid
 
-        # Apply zero cost function to generators (`gen`)
-        if idx not in net.poly_cost["element"].values:  # Avoid overwriting existing costs
-            pp.create_poly_cost(net, element=idx, et="gen", cp1_eur_per_mw=0.01)
-
-
     # Process static generators (sgen) - e.g., PV & Wind
     for idx, sgen in net.sgen.iterrows():
         if "wind" in str(sgen.get("type", "")).lower() or "pv" in str(sgen.get("type", "")).lower():
@@ -102,10 +95,6 @@ def set_missing_limits(net):
                 net.sgen.at[idx, 'max_q_mvar'] = 0.3 * sgen['p_mw']
             if pd.isna(sgen.get('min_q_mvar')):
                 net.sgen.at[idx, 'min_q_mvar'] = -0.1 * sgen['p_mw']
-
-        # Apply zero cost function to static generators (`sgen`)
-        if idx not in net.poly_cost["element"].values:
-            pp.create_poly_cost(net, element=idx, et="sgen", cp1_eur_per_mw=0.01)
 
     # Process storage units (storage)
     for idx, storage in net.storage.iterrows():
@@ -121,10 +110,6 @@ def set_missing_limits(net):
         # the storable energy of all storages is changed from infinity, to a value that they can supply they peak power for one day
         if storage['max_e_mwh'] == float('inf'):
             net.storage.at[idx, 'max_e_mwh'] = storage['p_mw'] * 24
-
-        # Apply zero cost function to storages (`storage`)
-        if idx not in net.poly_cost["element"].values:
-            pp.create_poly_cost(net, element=idx, et="storage", cp1_eur_per_mw=0.01)
 
         #Begrenzung für Busse (`bus`)**
     for idx, bus in net.bus.iterrows():
@@ -186,3 +171,133 @@ def set_missing_limits(net):
             net.trafo.at[idx, 'sn_mva'] = sn_mva
 
     return net
+
+
+def determine_minimum_ext_grid_power(net):
+    """
+    Runs OPF to determine the required minimum external grid power (max_p_mw).
+    Then updates ext_grid max_p_mw based on the result.
+    """
+    # Process conventional generators (gen)
+    for idx, gen in net.gen.iterrows():
+
+        # Active power limits (P)
+        if pd.isna(gen.get('max_p_mw')):
+            net.gen.at[idx, 'max_p_mw'] = 1.2 * gen['p_mw']
+        if pd.isna(gen.get('min_p_mw')):
+            net.gen.at[idx, 'min_p_mw'] = 0
+
+        if pd.isna(gen.get('max_q_mvar')):
+            net.gen.at[idx, 'max_q_mvar'] = gen['p_mw']  # Can provide Q
+        if pd.isna(gen.get('min_q_mvar')):
+            net.gen.at[idx, 'min_q_mvar'] = - gen['p_mw']
+
+    # Process static generators (sgen) - e.g., PV & Wind
+    for idx, sgen in net.sgen.iterrows():
+        if pd.isna(sgen.get('max_p_mw')):
+            net.sgen.at[idx, 'max_p_mw'] = sgen['p_mw']
+        if pd.isna(sgen.get('min_p_mw')):
+            net.sgen.at[idx, 'min_p_mw'] = 0
+        if pd.isna(sgen.get('max_q_mvar')):
+            net.sgen.at[idx, 'max_q_mvar'] = sgen['p_mw']
+        if pd.isna(sgen.get('min_q_mvar')):
+            net.sgen.at[idx, 'min_q_mvar'] = -sgen['p_mw']
+
+    # Process storage units (storage)
+    for idx, storage in net.storage.iterrows():
+        if pd.isna(storage.get('max_p_mw')):
+            net.storage.at[idx, 'max_p_mw'] = storage['p_mw']
+        if pd.isna(storage.get('min_p_mw')):
+            net.storage.at[idx, 'min_p_mw'] = -storage['p_mw']
+        if pd.isna(storage.get('max_q_mvar')):
+            net.storage.at[idx, 'max_q_mvar'] = storage['p_mw']
+        if pd.isna(storage.get('min_q_mvar')):
+            net.storage.at[idx, 'min_q_mvar'] = -storage['p_mw']
+
+    for idx, bus in net.bus.iterrows():
+        min_vm_pu, max_vm_pu = 0.8, 1.2  #
+
+        # Falls keine Grenzen gesetzt sind, setzen
+        if pd.isna(bus.get('min_vm_pu')):
+            net.bus.at[idx, 'min_vm_pu'] = min_vm_pu
+        if pd.isna(bus.get('max_vm_pu')):
+            net.bus.at[idx, 'max_vm_pu'] = max_vm_pu
+
+    for idx, ext_grid in net.ext_grid.iterrows():
+        # Falls max_p_mw oder min_p_mw nicht gesetzt sind, setzen
+        if pd.isna(ext_grid.get('max_p_mw')):
+            net.ext_grid.at[idx, 'max_p_mw'] = 1000000
+        if pd.isna(ext_grid.get('min_p_mw')):
+            net.ext_grid.at[idx, 'min_p_mw'] = -200000  # Sicherheitsfaktor
+
+        # Falls max_q_mvar oder min_q_mvar nicht gesetzt sind, setzen
+        if pd.isna(ext_grid.get('max_q_mvar')):
+            net.ext_grid.at[idx, 'max_q_mvar'] = 1000000  # Begrenzte Q-Abgabe (+50%)
+        if pd.isna(ext_grid.get('min_q_mvar')):
+            net.ext_grid.at[idx, 'min_q_mvar'] = -200000  # Größerer Q-Bezug (-80%)
+
+        net.ext_grid.at[idx, "slack"] = True
+
+    if "poly_cost" not in net or net.poly_cost.empty:
+       net["poly_cost"] = pd.DataFrame(columns=["element", "et", "cp1_eur_per_mw"])
+
+    #Ensure all elements have cost functions
+    add_cost_function_if_missing(net, "gen")
+    add_cost_function_if_missing(net, "sgen")
+    add_cost_function_if_missing(net, "storage")
+    add_cost_function_if_missing(net, "ext_grid")
+
+    try:
+       pp.runopp(
+           net,
+           init="pf",
+           calculate_voltage_angles=True,
+           enforce_q_lims=True,
+           distributed_slack=True
+       )
+       print("OPF Converged Successfully!")
+    except pp.optimal_powerflow.OPFNotConverged:
+       print("OPF failed. Debugging...")
+
+       # Print voltage limits
+       print("Voltage Limits:")
+       print(net.bus[["name", "vn_kv", "min_vm_pu", "max_vm_pu"]])
+
+       # Print ext_grid values
+       print("External Grid Settings:")
+       print(net.ext_grid)
+
+       # Print generator settings
+       print("Generators:")
+       print(net.gen)
+       print(net.sgen)
+       print(net.storage)
+
+    required_p_mw = net.res_ext_grid["p_mw"].sum() * 1.1
+    required_q_mvar = net.res_ext_grid["q_mvar"].sum() * 1.1
+
+    # **Corrected Assignment**
+    net.ext_grid["max_p_mw"] = required_p_mw
+    net.ext_grid["max_q_mvar"] = required_q_mvar
+
+    pp.runopp(
+        net,
+        init="pf",
+        calculate_voltage_angles=True,
+        enforce_q_lims=True,
+        distributed_slack=True
+    )
+
+    return net, required_p_mw, required_q_mvar
+
+def add_cost_function_if_missing(net, element_type):
+    """Ensure every element has an associated cost function"""
+    if "poly_cost" not in net or net.poly_cost.empty:
+        net["poly_cost"] = pp.create_empty_network().poly_cost  # Create cost table if missing
+
+    elements = getattr(net, element_type)
+
+    for idx in elements.index:
+        # Check if a cost function already exists for this element
+        if not (net.poly_cost["element"].eq(idx) & net.poly_cost["et"].eq(element_type)).any():
+            pp.create_poly_cost(net, element=idx, et=element_type, cp1_eur_per_mw=0.01)  # Example cost

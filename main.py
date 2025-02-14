@@ -16,6 +16,7 @@ from initialize import add_indicator
 from initialize import add_disparity
 from indi_gt import GraphenTheorieIndicator
 from adjustments import set_missing_limits
+from adjustments import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
 
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
@@ -23,7 +24,10 @@ from self_sufficiency import selfsuff
 net = pn.create_cigre_network_mv('all')
 # False, 'pv_wind', 'all'
 
-net = set_missing_limits(net)
+net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
+print(net.poly_cost)
+
+net = set_missing_limits(net, required_p_mw, required_q_mvar)
 
 #pp.runopp(net)
 #print(net.switch)
