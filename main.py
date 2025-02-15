@@ -18,14 +18,15 @@ from indi_gt import GraphenTheorieIndicator
 from adjustments import set_missing_limits
 from adjustments import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
+from self_sufficiency import selfsufficiency_neu
 
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
-#net = pn.create_cigre_network_lv()
-net = pn.create_cigre_network_mv('all')
+net = pn.create_cigre_network_lv()
+#net = pn.create_cigre_network_mv('all')
 # False, 'pv_wind', 'all'
 
 net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-print(net.poly_cost)
+#print(net.poly_cost)
 
 net = set_missing_limits(net, required_p_mw, required_q_mvar)
 
@@ -88,6 +89,9 @@ indi_selfsuff = float(selfsuff(net))
 print(f" self sufficiency: {indi_selfsuff}")
 dfinalresults = add_indicator(dfinalresults,'self sufficiency at bus level',indi_selfsuff)
 
+indi_selfsuff_neu = selfsufficiency_neu(net)
+print(f" System Self sufficiency: {indi_selfsuff_neu}")
+dfinalresults = add_indicator(dfinalresults,'System Self Sufficiency',indi_selfsuff_neu)
 
 # Define the maximum known types for each component
 max_known_types = {

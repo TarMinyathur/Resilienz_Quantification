@@ -48,15 +48,15 @@ def calculate_disparity_space(net, generation_factors):
     else:
         gen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
-    print(gen_sums)
-    print(sgen_sums)
-    print(storage_sums)
+    #print(gen_sums)
+    #print(sgen_sums)
+    #print(storage_sums)
 
     # Merge the sums from sgen, storage, and gen
     total_sums = pd.merge(sgen_sums, storage_sums, on='bus', how='outer', suffixes=('_sgen', '_storage')).fillna(0)
     total_sums = pd.merge(total_sums, gen_sums, on='bus', how='outer', suffixes=('', '_gen')).fillna(0)
 
-    print(total_sums)
+    #print(total_sums)
 
     # Sum the relevant columns
     total_sums['p_mw'] = total_sums['p_mw'] + total_sums.get('p_mw_storage', 0) + total_sums.get('p_mw_gen', 0)
@@ -64,7 +64,7 @@ def calculate_disparity_space(net, generation_factors):
     total_sums['effective_sn_mva'] = (total_sums['effective_sn_mva'] + total_sums.get('effective_sn_mva_storage', 0) + total_sums.get('effective_sn_mva_gen', 0))
     total_sums['sn_mva'] = total_sums['sn_mva'] + total_sums.get('sn_mva_storage', 0) + total_sums.get('sn_mva_gen', 0)
 
-    print(total_sums)
+    #print(total_sums)
 
     # Select only the relevant columns
     total_sums = total_sums[['bus', 'p_mw_sgen', 'q_mvar_sgen', 'effective_sn_mva_sgen', 'sn_mva_sgen']]

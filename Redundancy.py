@@ -3,6 +3,7 @@
 import pandapower as pp
 import itertools
 import networkx as nx
+import time
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?

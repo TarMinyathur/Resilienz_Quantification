@@ -3,6 +3,9 @@
 
 # selfsuff über subgraphs und conversion of loadflow? →
 
+import pandapower as pp
+import time
+
 def selfsuff(net):
 
     erfolg = 0
@@ -41,3 +44,61 @@ def selfsuff(net):
 
     selfsuff = float(erfolg) / (float(erfolg) + float(misserfolg))
     return float(selfsuff)
+
+def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
+    """
+    Testet, bis zu welchem Grad die Netzgrenzen reduziert werden können, bevor OPF nicht mehr konvergiert.
+
+    Parameter:
+    - net: pandapower Netz
+    - reduction_factor: Pro Schritt Reduktion der Netzgrenzen (Standard: 95% der vorherigen Werte)
+    - min_threshold: Untere Grenze für die Reduktion (Standard: 50% der ursprünglichen Werte)
+
+    Gibt zurück:
+    - Liste mit (Reduktionswert, Zeit bis zur Konvergenz)
+    """
+    results = []
+
+    # Originalwerte speichern
+    #net = grid.copy
+    ext_grid = grid.ext_grid.copy
+    tempresults = 1
+
+    while True:
+        try:
+            # Startzeit messen
+            start_time = time.time()
+
+            # OPF ausführen
+            pp.runopp(
+                grid,
+                init="pf",
+                calculate_voltage_angles=True,
+                enforce_q_lims=True,
+                distributed_slack=True
+            )
+
+            # Dauer messen
+            duration = time.time() - start_time
+            print(f"OPF konvergiert in {duration:.4f} Sekunden.")
+
+            # Ergebnisse speichern
+            tempresults *= reduction_factor
+
+            # Netzgrenzen weiter reduzieren
+            grid.ext_grid.loc[:, 'max_p_mw'] *= reduction_factor
+            grid.ext_grid.loc[:, 'max_q_mvar'] *= reduction_factor
+            grid.ext_grid.loc[:, 'min_p_mw'] *= reduction_factor
+            grid.ext_grid.loc[:, 'min_q_mvar'] *= reduction_factor
+
+        except pp.optimal_powerflow.OPFNotConverged:
+            print("OPF konvergiert nichtmehr bei folgenden Werten!")
+            break
+
+    results = 1 - tempresults
+    print(f"  max_p_mw: {grid.ext_grid.get('max_p_mw')} MW")
+    print(f"  min_p_mw: {grid.ext_grid.get('min_p_mw')} MW")
+    print(f"  max_q_mvar: {grid.ext_grid.get('max_q_mvar')} MVAR")
+    print(f"  min_q_mvar: {grid.ext_grid.get('min_q_mvar')} MVAR")
+
+    return results
