@@ -21,8 +21,8 @@ from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
 
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
-net = pn.create_cigre_network_lv()
-#net = pn.create_cigre_network_mv('all')
+#net = pn.create_cigre_network_lv()
+net = pn.create_cigre_network_mv('all')
 # False, 'pv_wind', 'all'
 
 net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
@@ -83,16 +83,6 @@ if not nx.is_connected(G):
     largest_component = max(nx.connected_components(G), key=len)
     G = G.subgraph(largest_component).copy()
 
-GraphenTheorieIndicator(G, dfinalresults)
-
-indi_selfsuff = float(selfsuff(net))
-print(f" self sufficiency: {indi_selfsuff}")
-dfinalresults = add_indicator(dfinalresults,'self sufficiency at bus level',indi_selfsuff)
-
-indi_selfsuff_neu = selfsufficiency_neu(net)
-print(f" System Self sufficiency: {indi_selfsuff_neu}")
-dfinalresults = add_indicator(dfinalresults,'System Self Sufficiency',indi_selfsuff_neu)
-
 # Define the maximum known types for each component
 max_known_types = {
     'generation': 8,  # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
@@ -103,104 +93,114 @@ max_known_types = {
 # Combine sgen, gen, and storage into one DataFrame
 generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
 
-# Calculate and print Shannon evenness and variety for combined generation units
-evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
-print(f"Generation - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
+selected_indicators = {
+    "self_sufficiency": False,
+    "system_self_sufficiency": False,
+    "generation_shannon_evenness": False,
+    "generation_variety": False,
+    "line_shannon_evenness": False,
+    "line_variety": False,
+    "load_shannon_evenness": False,
+    "load_variety": False,
+    "disparity_generators": True,
+    "disparity_load": True,
+    "disparity_trafo": True,
+    "disparity_lines": True,
+    "n_3_redundancy": False,
+    "n_3_redundancy_print": False,
+    "GraphenTheorie": False,
+    "show_spider_plot": True,
+    "print_results": True,
+    "output_excel": False
+}
 
-dfinalresults = add_indicator(dfinalresults,"Generation Shannon Evenness", evenness)
-dfinalresults = add_indicator(dfinalresults,"Generation Variety", variety_scaled)
-#add_indicator("Generation Max Variety", max_variety)
+if selected_indicators["self_sufficiency"]:
+    indi_selfsuff = float(selfsuff(net))
+    dfinalresults = add_indicator(dfinalresults, 'self sufficiency at bus level', indi_selfsuff)
 
-# Calculate and print Shannon evenness and variety for lines
-evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
-print(f"Line - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
+if selected_indicators["system_self_sufficiency"]:
+    indi_selfsuff_neu = selfsufficiency_neu(net)
+    dfinalresults = add_indicator(dfinalresults, 'System Self Sufficiency', indi_selfsuff_neu)
 
-dfinalresults = add_indicator(dfinalresults,"Line Shannon Evenness", evenness)
-dfinalresults = add_indicator(dfinalresults,"Line Variety", variety_scaled)
-#add_indicator("Line Max Variety", max_variety)
+if selected_indicators["generation_shannon_evenness"]:
+    evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
+    dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
+    if selected_indicators["generation_variety"]:
+        dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety_scaled)
 
-# Calculate and print Shannon evenness and variety for loads
-evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
-print(f"Load - Shannon Evenness: {evenness}, Variety: {variety}, Max Variety: {max_variety}, Scaled Variety: {variety_scaled}")
+if selected_indicators["line_shannon_evenness"]:
+    evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
+    dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness)
+    if selected_indicators["line_variety"]:
+        dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
 
-dfinalresults = add_indicator(dfinalresults,"Load Shannon Evenness", evenness)
-dfinalresults = add_indicator(dfinalresults,"Load Variety", variety_scaled)
+if selected_indicators["load_shannon_evenness"]:
+    evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
+    dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
+    if selected_indicators["load_variety"]:
+        dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
 
-# Calculate generation factors
-generation_factors = calculate_generation_factors(net)
+if selected_indicators["disparity_generators"]:
+    # Calculate generation factors
+    generation_factors = calculate_generation_factors(net)
 
-# Calculate disparity space
-disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)
+    # Calculate disparity space
+    disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)
 
-# Compute the integral (sum) over the entire DataFrame
-integral_value_gen = disparity_df_gen.values.sum()
-print(f"Disparity Integral Generators: {integral_value_gen}")
-print(f"Disparity Integral max Loads: {max_integral_gen}")
+    # Compute the integral (sum) over the entire DataFrame
+    integral_value_gen = disparity_df_gen.values.sum()
+    #print(f"Disparity Integral Generators: {integral_value_gen}")
+    #print(f"Disparity Integral max Loads: {max_integral_gen}")
 
-ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
+    ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Generators',
+                                  ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
 
-# Calculate disparity space for loads
-disparity_df_load, max_integral_load = calculate_load_disparity(net)
-#print(disparity_df_load)
+if selected_indicators["disparity_load"]:
+    disparity_df_load, max_integral_load = calculate_load_disparity(net)
+    integral_value_load = disparity_df_load.values.sum()
+    ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load,integral_value_load / max_integral_load)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
 
-# Compute the integral (sum) over the entire DataFrame
-integral_value_load = disparity_df_load.values.sum()
-print(f"Disparity Integral Loads: {integral_value_load}")
-print(f"Disparity Integral max Loads: {max_integral_load }")
+if selected_indicators["disparity_trafo"]:
+    disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
+    integral_value_trafo = disparity_df_trafo.values.sum()
+    if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
+        print("Disperity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
+        ddisparity = add_disparity(ddisparity, 'Trafo', 0, max_int_trafo,0)
+    else:
+        ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
 
-ddisparity =add_disparity(ddisparity,'Load', integral_value_load, max_integral_load, integral_value_load/ max_integral_load)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
 
-# Calculate disparity space for transformers
-disparity_df_trafo,max_int_trafo = calculate_transformer_disparity(net)
-#print(disparity_df_trafo)
+if selected_indicators["disparity_lines"]:
+    disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
+    integral_value_line = disparity_df_lines.values.sum()
+    ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
-# Compute the integral (sum) over the entire DataFrame
-integral_value_trafo = disparity_df_trafo.values.sum()
-print(f"Disparity Integral Transformers: {integral_value_trafo}")
-print(f"max theoretical Disparity Integral Transformers: {max_int_trafo}")
-
-ddisparity = add_disparity(ddisparity,'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
-
-# Calculate disparity space for lines
-disparity_df_lines,max_int_disp_lines = calculate_line_disparity(net)
-
-# Compute the integral (sum) over the entire DataFrame
-integral_value_line = disparity_df_lines.values.sum()
-print(f"Disparity Integral Lines: {integral_value_line}")
-print(f"max theoretical Disparity Integral Lines: {max_int_disp_lines}")
-
-ddisparity = add_disparity(ddisparity,'Lines',integral_value_line,max_int_disp_lines,integral_value_line / max_int_disp_lines)
-
-print(ddisparity)
-
-dfinalresults = add_indicator(dfinalresults,'Disparity Generators',ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
-dfinalresults = add_indicator(dfinalresults,'Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
-dfinalresults = add_indicator(dfinalresults,'Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
-dfinalresults = add_indicator(dfinalresults,'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
-# dfinalresults = add_indicator('Disparity',ddisparity['Verhaeltnis'].mean())
-
-# Perform N-3 redundancy check
-n3_redundancy_results = n_3_redundancy_check(net,element_counts)
-
-# Initialize Success and Failed counters
-Success = 0
-Failed = 0
-total_checks = 0
-
-# Print the results
-for element_type, counts in n3_redundancy_results.items():
-    Success += counts['Success']
-    Failed += counts['Failed']
+if selected_indicators["n_3_redundancy"]:
+    n3_redundancy_results = n_3_redundancy_check(net, element_counts)
+    Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
+    Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
     total_checks = Success + Failed
     rate = Success / total_checks if total_checks != 0 else 0
-    print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
+    for element_type, counts in n3_redundancy_results.items():
+        Success += counts['Success']
+        Failed += counts['Failed']
+        total_checks = Success + Failed
+        rate = Success / total_checks if total_checks != 0 else 0
+        if selected_indicators["n_3_redundancy_print"]:
+            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
+    dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
-dfinalresults = add_indicator(dfinalresults,'Overall 70% Redundancy', rate)
+if selected_indicators["GraphenTheorie"]:
+    GraphenTheorieIndicator(G, dfinalresults)
 
+if selected_indicators["show_spider_plot"]:
+    plot_spider_chart(dfinalresults)
+    if selected_indicators["print_results"]:
+        print(dfinalresults)
+        if selected_indicators["output_excel"]:
+            dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
 
-#Output
-
-plot_spider_chart(dfinalresults)
-# Save the DataFrame to an Excel file
-# dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
-print(dfinalresults)

@@ -52,7 +52,7 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
     Parameter:
     - net: pandapower Netz
     - reduction_factor: Pro Schritt Reduktion der Netzgrenzen (Standard: 95% der vorherigen Werte)
-    - min_threshold: Untere Grenze für die Reduktion (Standard: 50% der ursprünglichen Werte)
+    - min_threshold: Untere Grenze für die Reduktion (Standard: 95% der ursprünglichen Werte)
 
     Gibt zurück:
     - Liste mit (Reduktionswert, Zeit bis zur Konvergenz)
