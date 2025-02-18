@@ -29,8 +29,7 @@ ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 basic = {
     "Grid": "mv_all",
     "Adjustements": True,
-    "Overview_Grid": True
-
+    "Overview_Grid": False
 }
 
 if basic["Grid"] == "mv_all":
