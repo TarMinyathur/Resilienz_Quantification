@@ -221,4 +221,3 @@ if selected_indicators["show_spider_plot"]:
         print(dfinalresults)
         if selected_indicators["output_excel"]:
             dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
-
