@@ -20,78 +20,48 @@ from adjustments import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
 
-#initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
-#net = pn.create_cigre_network_lv()
-net = pn.create_cigre_network_mv('all')
-# False, 'pv_wind', 'all'
-
-net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-#print(net.poly_cost)
-
-net = set_missing_limits(net, required_p_mw, required_q_mvar)
-
-#pp.runopp(net)
-#print(net.switch)
-
-# Initialize an empty DataFrame
-
 dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
 ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
-# Create an empty NetworkX graph
-G = nx.Graph()
+# Basic initialisation of different test grids via "Grid": "mv_all"; "mv_pv_wind"; "mv_no_renew"; "lv"; "new"
+#initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 
-# Add nodes from Pandapower network
-for bus in net.bus.index:
-    G.add_node(bus)
+basic = {
+    "Grid": "mv_all",
+    "Adjustements": True,
+    "Overview_Grid": True
 
-for idx, line in net.line.iterrows():
-    from_bus = line.from_bus
-    to_bus = line.to_bus
-
-    # Check if there is a switch between from_bus and to_bus
-    switch_exists = False
-    for _, switch in net.switch.iterrows():
-        if switch.bus == from_bus and switch.element == to_bus and switch.et == 'l':
-            switch_exists = True
-            switch_closed = switch.closed
-            break
-        elif switch.bus == to_bus and switch.element == from_bus and switch.et == 'l':
-            switch_exists = True
-            switch_closed = switch.closed
-            break
-
-    # Only add the edge if there is no switch or if the switch is closed
-    if not switch_exists or (switch_exists and switch_closed):
-        length = line.length_km
-        G.add_edge(from_bus, to_bus, weight=length)
-
-# Count elements and scaled elements
-element_counts = count_elements(net)
-
-# Print both counts in one row
-print("Element Type | Original Count | Scaled Count (0.3)")
-print("-" * 45)
-for element_type in element_counts["original_counts"]:
-    original_count = element_counts["original_counts"][element_type]
-    scaled_count = element_counts["scaled_counts"][element_type]
-    print(f"{element_type.capitalize():<12} | {original_count:<14} | {scaled_count:<20}")
-
-#checks if G is complete connected, otherwise the largest subgraph is analyzed going forward
-if not nx.is_connected(G):
-    # Get largest connected component
-    largest_component = max(nx.connected_components(G), key=len)
-    G = G.subgraph(largest_component).copy()
-
-# Define the maximum known types for each component
-max_known_types = {
-    'generation': 8,  # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
-    'line': 2,  # "ol" (overhead line) and "cs" (cable system)
-    'load': 10  # Example: 4 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
 }
 
-# Combine sgen, gen, and storage into one DataFrame
-generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
+if basic["Grid"] == "mv_all":
+    net = pn.create_cigre_network_mv('all')
+elif basic["Grid"] == "mv_pv_wind":
+    net = pn.create_cigre_network_mv('pv_wind')
+elif basic["Grid"] == "mv_no_renew":
+    net = pn.create_cigre_network_mv(False)
+elif basic["Grid"] == "cigre_lv":
+    net = pn.create_cigre_network_lv()
+elif basic["Grid"] == "kerber":
+    net = pn.create_kerber_dorfnetz()
+elif basic["Grid"] == "dickert":
+    net = pn.create_dickert_lv_network()
+else:
+    raise ValueError(f"Unbekannter Grid-Typ: {basic['Grid']}")
+
+if basic["Adjustements"]:
+    net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
+    net = set_missing_limits(net, required_p_mw, required_q_mvar)
+
+if basic["Overview_Grid"]:
+    # Count elements and scaled elements
+    element_counts = count_elements(net)
+    # Print both counts in one row
+    print("Element Type | Original Count | Scaled Count (0.3)")
+    print("-" * 45)
+    for element_type in element_counts["original_counts"]:
+        original_count = element_counts["original_counts"][element_type]
+        scaled_count = element_counts["scaled_counts"][element_type]
+        print(f"{element_type.capitalize():<12} | {original_count:<14} | {scaled_count:<20}")
 
 selected_indicators = {
     "self_sufficiency": False,
@@ -122,7 +92,19 @@ if selected_indicators["system_self_sufficiency"]:
     indi_selfsuff_neu = selfsufficiency_neu(net)
     dfinalresults = add_indicator(dfinalresults, 'System Self Sufficiency', indi_selfsuff_neu)
 
+if selected_indicators["generation_shannon_evenness"] or selected_indicators["line_shannon_evenness"] or selected_indicators["load_shannon_evenness"]:
+    # Define the maximum known types for each component
+    max_known_types = {
+        'generation': 8,
+        # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
+        'line': 2,  # "ol" (overhead line) and "cs" (cable system)
+        'load': 10
+        # Example: 4 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
+    }
+
 if selected_indicators["generation_shannon_evenness"]:
+    # Combine sgen, gen, and storage into one DataFrame
+    generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
     dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
     if selected_indicators["generation_variety"]:
@@ -180,6 +162,9 @@ if selected_indicators["disparity_lines"]:
     dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
 if selected_indicators["n_3_redundancy"]:
+    if not basic["Overview_Grid"]:
+        # Count elements and scaled elements
+        element_counts = count_elements(net)
     n3_redundancy_results = n_3_redundancy_check(net, element_counts)
     Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
     Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
@@ -195,6 +180,40 @@ if selected_indicators["n_3_redundancy"]:
     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
 if selected_indicators["GraphenTheorie"]:
+    # Create an empty NetworkX graph
+    G = nx.Graph()
+
+    # Add nodes from Pandapower network
+    for bus in net.bus.index:
+        G.add_node(bus)
+
+    for idx, line in net.line.iterrows():
+        from_bus = line.from_bus
+        to_bus = line.to_bus
+
+        # Check if there is a switch between from_bus and to_bus
+        switch_exists = False
+        for _, switch in net.switch.iterrows():
+            if switch.bus == from_bus and switch.element == to_bus and switch.et == 'l':
+                switch_exists = True
+                switch_closed = switch.closed
+                break
+            elif switch.bus == to_bus and switch.element == from_bus and switch.et == 'l':
+                switch_exists = True
+                switch_closed = switch.closed
+                break
+
+        # Only add the edge if there is no switch or if the switch is closed
+        if not switch_exists or (switch_exists and switch_closed):
+            length = line.length_km
+            G.add_edge(from_bus, to_bus, weight=length)
+
+    # checks if G is complete connected, otherwise the largest subgraph is analyzed going forward
+    if not nx.is_connected(G):
+        # Get largest connected component
+        largest_component = max(nx.connected_components(G), key=len)
+        G = G.subgraph(largest_component).copy()
+
     GraphenTheorieIndicator(G, dfinalresults)
 
 if selected_indicators["show_spider_plot"]:
