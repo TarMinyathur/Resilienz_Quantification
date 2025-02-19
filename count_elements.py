@@ -16,7 +16,7 @@ def count_elements(net):
     # Multiply counts by 0.3 and round down
     scaled_counts = {}
     for element_type, count in counts.items():
-        scaled_count = math.floor(count * 0.3)
+        scaled_count = math.floor(count * 0.15)
         scaled_counts[element_type] = scaled_count
 
     # Create a dictionary containing both counts and scaled counts

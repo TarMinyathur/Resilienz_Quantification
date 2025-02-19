@@ -273,6 +273,10 @@ def determine_minimum_ext_grid_power(net):
        print(net.sgen)
        print(net.storage)
 
+       # Print Loads
+       print("Loads:")
+       print(net.load)
+
     required_p_mw = net.res_ext_grid["p_mw"].sum() * 1.1
     required_q_mvar = net.res_ext_grid["q_mvar"].sum() * 1.1
 
