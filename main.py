@@ -29,7 +29,8 @@ ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 basic = {
     "Grid": "mv_all",
     "Adjustements": True,
-    "Overview_Grid": False
+    "Overview_Grid": True
+
 }
 
 if basic["Grid"] == "mv_all":
@@ -221,3 +222,4 @@ if selected_indicators["show_spider_plot"]:
         print(dfinalresults)
         if selected_indicators["output_excel"]:
             dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
+
