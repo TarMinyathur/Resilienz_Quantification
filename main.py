@@ -27,13 +27,32 @@ ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 
 basic = {
-    "Grid": "mv_all",
+    "Grid": "mv_pv_wind",
     "Adjustements": True,
-    "Overview_Grid": False
+    "Overview_Grid": True
 }
 
 if basic["Grid"] == "mv_all":
     net = pn.create_cigre_network_mv('all')
+elif basic["Grid"] == "mv_all_high":
+    net = pn.create_cigre_network_mv('all')
+    print("Verteilte Erzeugung und Speicher um den Faktor 5 erhöht.")
+
+    # 1. Erhöhung für gen (zentraler Generator)
+    for idx, gen in net.gen.iterrows():
+        net.gen.at[idx, 'p_mw'] *= 2
+        net.gen.at[idx, 'q_mvar'] *= 2
+
+    # 2. Erhöhung für sgen (verteilte Erzeugung)
+    for idx, sgen in net.sgen.iterrows():
+        net.sgen.at[idx, 'p_mw'] *= 2
+        net.sgen.at[idx, 'q_mvar'] *= 2
+
+    # 3. Erhöhung für storage (Speicher)
+    for idx, storage in net.storage.iterrows():
+        net.storage.at[idx, 'p_mw'] *= 2
+        net.storage.at[idx, 'q_mvar'] *= 2
+
 elif basic["Grid"] == "mv_pv_wind":
     net = pn.create_cigre_network_mv('pv_wind')
 elif basic["Grid"] == "mv_no_renew":
@@ -47,37 +66,39 @@ elif basic["Grid"] == "dickert":
 else:
     raise ValueError(f"Unbekannter Grid-Typ: {basic['Grid']}")
 
-if basic["Adjustements"]:
-    net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-    net = set_missing_limits(net, required_p_mw, required_q_mvar)
-
 if basic["Overview_Grid"]:
     # Count elements and scaled elements
     element_counts = count_elements(net)
     # Print both counts in one row
-    print("Element Type | Original Count | Scaled Count (0.3)")
+    print(net)
+    print("Element Type | Original Count | Scaled Count (* 0.15)")
     print("-" * 45)
     for element_type in element_counts["original_counts"]:
         original_count = element_counts["original_counts"][element_type]
         scaled_count = element_counts["scaled_counts"][element_type]
         print(f"{element_type.capitalize():<12} | {original_count:<14} | {scaled_count:<20}")
 
+if basic["Adjustements"]:
+    net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
+    net = set_missing_limits(net, required_p_mw, required_q_mvar)
+
+
 selected_indicators = {
-    "self_sufficiency": False,
-    "system_self_sufficiency": False,
-    "generation_shannon_evenness": False,
-    "generation_variety": False,
-    "line_shannon_evenness": False,
-    "line_variety": False,
-    "load_shannon_evenness": False,
-    "load_variety": False,
+    "self_sufficiency": True,
+    "system_self_sufficiency": True,
+    "generation_shannon_evenness": True,
+    "generation_variety": True,
+    "line_shannon_evenness": True,
+    "line_variety": True,
+    "load_shannon_evenness": True,
+    "load_variety": True,
     "disparity_generators": True,
     "disparity_load": True,
     "disparity_trafo": True,
     "disparity_lines": True,
-    "n_3_redundancy": False,
-    "n_3_redundancy_print": False,
-    "GraphenTheorie": False,
+    "n_3_redundancy": True,
+    "n_3_redundancy_print": True,
+    "GraphenTheorie": True,
     "show_spider_plot": True,
     "print_results": True,
     "output_excel": False
@@ -123,7 +144,7 @@ if selected_indicators["load_shannon_evenness"]:
 
 if selected_indicators["disparity_generators"]:
     # Calculate generation factors
-    generation_factors = calculate_generation_factors(net)
+    generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
 
     # Calculate disparity space
     disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)

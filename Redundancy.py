@@ -3,6 +3,8 @@
 import pandapower as pp
 import itertools
 import networkx as nx
+import pandapower.networks as pn
+from concurrent.futures import ThreadPoolExecutor
 import time
 
 # Idee: Redundanz über senken von max external messen?
@@ -24,49 +26,55 @@ def n_3_redundancy_check(net, element_counts):
     #    "switch": list(itertools.combinations(net.switch.index, min(3, element_counts["scaled_counts"]["switch"]))),
     #    "load": list(itertools.combinations(net.load.index, min(3, element_counts["scaled_counts"]["load"]))),
         "sgen": list(itertools.combinations(net.sgen.index, min(3, element_counts["scaled_counts"]["sgen"]))),
-        "trafo": list(itertools.combinations(net.trafo.index, min(1, element_counts["scaled_counts"]["trafo"]))),
+        "trafo": list(itertools.combinations(net.trafo.index, min(3, element_counts["scaled_counts"]["trafo"]))),
         "bus": list(itertools.combinations(net.bus.index, min(3, element_counts["scaled_counts"]["bus"]))),
-        "storage": list(itertools.combinations(net.storage.index, min(1, element_counts["scaled_counts"]["storage"])))
+        "storage": list(itertools.combinations(net.storage.index, min(3, element_counts["scaled_counts"]["storage"])))
     }
 
-    # Function to process each triple and update results
-    def process_triples(element_type, triples):
-        for triple in triples:
-            # Create a copy of the network to simulate the failures
-            net_temp = net.deepcopy()
+    # Process each element type in parallel
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for element_type, triples in element_triples.items():
+            for triple in triples:
+                # Create a shallow copy of the network to simulate the failures
+                net_temp = net.deepcopy()
 
-            # Set the elements out of service
-            out_of_service_elements = {element_type: triple}
-            for element_id in triple:
-                net_temp[element_type].at[element_id, 'in_service'] = False
+                # pass copied net
+                futures.append(executor.submit(process_triple, element_type, triple, net_temp))
 
-            # Check if the grid is still connected
-            if not is_graph_connected(net_temp, out_of_service_elements):
-                results[element_type]["Failed"] += 1
-                continue
-
-            # Run the load flow calculation
-            try:
-                pp.runopp(
-                    net_temp,
-                    init="pf",
-                    calculate_voltage_angles=True,  # Compute voltage angles
-                    enforce_q_lims=True,  # Enforce reactive power (Q) limits
-                    distributed_slack=True  # Distribute slack among multiple sources
-                )
-
-                #Version1: (
-                #pp.runpp(net_temp, calculate_voltage_angles=True, tolerance_mva=1e-10)
-                results[element_type]["Success"] += 1
-            except:
-                results[element_type]["Failed"] += 1
-
-    # Process each element type
-    for element_type, triples in element_triples.items():
-        process_triples(element_type, triples)
+        for future in futures:
+            element_type, status = future.result()
+            results[element_type][status] += 1
 
     return results
 
+# Function to process each triple and update results
+def process_triple(element_type, triple, net_temp):
+
+    # Set the elements out of service
+    for element_id in triple:
+        net_temp[element_type].at[element_id, 'in_service'] = False
+
+    # Check if the grid is still connected
+    out_of_service_elements = {element_type: triple}
+    if not is_graph_connected(net_temp, out_of_service_elements):
+        return element_type, "Failed"
+
+    # Run the load flow calculation
+    try:
+        pp.runopp(
+            net_temp,
+            init="pf",
+            calculate_voltage_angles=True,  # Compute voltage angles
+            enforce_q_lims=True,  # Enforce reactive power (Q) limits
+            distributed_slack=True  # Distribute slack among multiple sources
+        )
+        return element_type, "Success"
+    except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
+        return element_type, "Failed"
+    except Exception as e:
+        print(f"Unexpected error for {element_type} with triple {triple}: {e}")
+        return element_type, "Failed"
 
 def is_graph_connected(net, out_of_service_elements):
     # Create NetworkX graph manually
