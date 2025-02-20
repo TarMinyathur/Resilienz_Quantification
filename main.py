@@ -19,10 +19,11 @@ from adjustments import set_missing_limits
 from adjustments import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
+from buffer import calculate_buffer
 
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
-net = pn.create_cigre_network_lv()
-#net = pn.create_cigre_network_mv('all')
+# net = pn.create_cigre_network_lv()
+net = pn.create_cigre_network_mv('all')
 # False, 'pv_wind', 'all'
 
 net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
@@ -196,6 +197,12 @@ for element_type, counts in n3_redundancy_results.items():
     print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
 
 dfinalresults = add_indicator(dfinalresults,'Overall 70% Redundancy', rate)
+
+
+# buffer capacity
+buffer = calculate_buffer(net)
+print("test buffer")
+dfinalresults = add_indicator(dfinalresults,'Buffer Capacity', buffer)  # value for buffer tbd!
 
 
 #Output
