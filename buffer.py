@@ -1,5 +1,6 @@
 import pandapower.networks as pn
 
+
 def calculate_buffer(net):
     
     total_load = net.load["p_mw"].sum()
@@ -18,6 +19,7 @@ def calculate_buffer(net):
 
     return buffer_ratio   
 
+
 def check_battery_capacity(net, buffer_sum):
     if "storage" in net and not net.storage.empty:
         battery_capacity = net.storage["p_mw"].sum()
@@ -25,6 +27,7 @@ def check_battery_capacity(net, buffer_sum):
     else:
         print("No batteries in net")
     return buffer_sum 
+
 
 def get_sgen(net, buffer_sum):
     sgen_types = ["Residential fuel cell", "CHP diesel", "Fuel cell"] # tdb if further sgen types to include
@@ -37,6 +40,7 @@ def get_sgen(net, buffer_sum):
             buffer_sum.append({"type": sgen_type, "capacity": sgen_capacity})
 
     return buffer_sum 
+
 
 if __name__ == "__main__":
     net = pn.create_cigre_network_mv(with_der="all")
