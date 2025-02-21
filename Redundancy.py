@@ -22,13 +22,14 @@ def n_3_redundancy_check(net, element_counts):
 
     # Create combinations of three elements for each type
     element_triples = {
-        "line": list(itertools.combinations(net.line.index, min(3, element_counts["scaled_counts"]["line"]))),
-    #    "switch": list(itertools.combinations(net.switch.index, min(3, element_counts["scaled_counts"]["switch"]))),
-    #    "load": list(itertools.combinations(net.load.index, min(3, element_counts["scaled_counts"]["load"]))),
-        "sgen": list(itertools.combinations(net.sgen.index, min(3, element_counts["scaled_counts"]["sgen"]))),
-        "trafo": list(itertools.combinations(net.trafo.index, min(3, element_counts["scaled_counts"]["trafo"]))),
-        "bus": list(itertools.combinations(net.bus.index, min(3, element_counts["scaled_counts"]["bus"]))),
-        "storage": list(itertools.combinations(net.storage.index, min(3, element_counts["scaled_counts"]["storage"])))
+        "line": list(itertools.combinations(net.line.index, min(3, element_counts["scaled_counts"]["line"]))) if not net.line.empty else [],
+        #"switch": list(itertools.combinations(net.switch.index, min(3, element_counts["scaled_counts"]["switch"]))) if not net.switch.empty else [],
+        #"load": list(itertools.combinations(net.load.index, min(3, element_counts["scaled_counts"]["load"]))) if not net.load.empty else [],
+        "sgen": list(itertools.combinations(net.sgen.index, min(3, element_counts["scaled_counts"]["sgen"]))) if not net.sgen.empty else [],
+        "trafo": list(itertools.combinations(net.trafo.index, min(3, element_counts["scaled_counts"]["trafo"]))) if not net.trafo.empty else [],
+        "bus": list(itertools.combinations(net.bus.index, min(3, element_counts["scaled_counts"]["bus"]))) if not net.bus.empty else [],
+        "storage": list(itertools.combinations(net.storage.index, min(3, element_counts["scaled_counts"]["storage"]))) if not net.storage.empty else []
+
     }
 
     # Process each element type in parallel
@@ -62,6 +63,7 @@ def process_triple(element_type, triple, net_temp):
 
     # Run the load flow calculation
     try:
+        # First attempt with init="pf"
         pp.runopp(
             net_temp,
             init="pf",
@@ -70,10 +72,32 @@ def process_triple(element_type, triple, net_temp):
             distributed_slack=True  # Distribute slack among multiple sources
         )
         return element_type, "Success"
+        # total_generation_q = net_temp.res_gen.q_mvar.sum()
+        # total_load_q = net_temp.res_load.q_mvar.sum()
+        # print(f"Total Q Generation: {total_generation_q} MVar")
+        # print(f"Total Q Load: {total_load_q} MVar")
+        # print(f"Total Q Externes Netz: {net_temp.res_ext_grid.q_mvar} MVar")
+        # Debugging for inductive behavior. The external grid pushes more reactive power in the system, than the loads need in total, which makes sense, as the external grid stabilizes the voltages, where the generators were not able to.
     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-        return element_type, "Failed"
+        print(f"OPF did not converge with init='pf' for {element_type}, retrying with init='flat'")
+        try:
+            # Retry with init="flat"
+            pp.runopp(
+                net_temp,
+                init="flat",
+                calculate_voltage_angles=True,  # Compute voltage angles
+                enforce_q_lims=True,  # Enforce reactive power (Q) limits
+                distributed_slack=True  # Distribute slack among multiple sources
+            )
+            return element_type, "Success"
+        except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
+            print(f"OPF did not converge with init='flat' for {element_type}")
+            return element_type, "Failed"
+        except Exception as e:
+            print(f"Unexpected error for {element_type} with triple {triple} using init='flat': {e}")
+            return element_type, "Failed"
     except Exception as e:
-        print(f"Unexpected error for {element_type} with triple {triple}: {e}")
+        print(f"Unexpected error for {element_type} with triple {triple} using init='pf': {e}")
         return element_type, "Failed"
 
 def is_graph_connected(net, out_of_service_elements):

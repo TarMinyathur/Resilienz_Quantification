@@ -27,31 +27,49 @@ ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 
 basic = {
-    "Grid": "mv_pv_wind",
+    "Grid": "mv_all_high10",
     "Adjustements": True,
     "Overview_Grid": True
 }
 
 if basic["Grid"] == "mv_all":
     net = pn.create_cigre_network_mv('all')
-elif basic["Grid"] == "mv_all_high":
+elif basic["Grid"] == "mv_all_high10":
+    net = pn.create_cigre_network_mv('all')
+    print("Verteilte Erzeugung und Speicher um den Faktor 10 erhöht.")
+
+    # 1. Erhöhung für gen (zentraler Generator)
+    for idx, gen in net.gen.iterrows():
+        net.gen.at[idx, 'p_mw'] *= 10
+        net.gen.at[idx, 'q_mvar'] *= 10
+
+    # 2. Erhöhung für sgen (verteilte Erzeugung)
+    for idx, sgen in net.sgen.iterrows():
+        net.sgen.at[idx, 'p_mw'] *= 10
+        net.sgen.at[idx, 'q_mvar'] *= 10
+
+    # 3. Erhöhung für storage (Speicher)
+    for idx, storage in net.storage.iterrows():
+        net.storage.at[idx, 'p_mw'] *= 10
+        net.storage.at[idx, 'q_mvar'] *= 10
+elif basic["Grid"] == "mv_all_high5":
     net = pn.create_cigre_network_mv('all')
     print("Verteilte Erzeugung und Speicher um den Faktor 5 erhöht.")
 
     # 1. Erhöhung für gen (zentraler Generator)
     for idx, gen in net.gen.iterrows():
-        net.gen.at[idx, 'p_mw'] *= 2
-        net.gen.at[idx, 'q_mvar'] *= 2
+        net.gen.at[idx, 'p_mw'] *= 5
+        net.gen.at[idx, 'q_mvar'] *= 5
 
     # 2. Erhöhung für sgen (verteilte Erzeugung)
     for idx, sgen in net.sgen.iterrows():
-        net.sgen.at[idx, 'p_mw'] *= 2
-        net.sgen.at[idx, 'q_mvar'] *= 2
+        net.sgen.at[idx, 'p_mw'] *= 5
+        net.sgen.at[idx, 'q_mvar'] *= 5
 
     # 3. Erhöhung für storage (Speicher)
     for idx, storage in net.storage.iterrows():
-        net.storage.at[idx, 'p_mw'] *= 2
-        net.storage.at[idx, 'q_mvar'] *= 2
+        net.storage.at[idx, 'p_mw'] *= 5
+        net.storage.at[idx, 'q_mvar'] *= 5
 
 elif basic["Grid"] == "mv_pv_wind":
     net = pn.create_cigre_network_mv('pv_wind')
@@ -84,21 +102,21 @@ if basic["Adjustements"]:
 
 
 selected_indicators = {
-    "self_sufficiency": True,
-    "system_self_sufficiency": True,
-    "generation_shannon_evenness": True,
-    "generation_variety": True,
-    "line_shannon_evenness": True,
-    "line_variety": True,
-    "load_shannon_evenness": True,
-    "load_variety": True,
-    "disparity_generators": True,
-    "disparity_load": True,
-    "disparity_trafo": True,
-    "disparity_lines": True,
+    "self_sufficiency": False,
+    "system_self_sufficiency": False,
+    "generation_shannon_evenness": False,
+    "generation_variety": False,
+    "line_shannon_evenness": False,
+    "line_variety": False,
+    "load_shannon_evenness": False,
+    "load_variety": False,
+    "disparity_generators": False,
+    "disparity_load": False,
+    "disparity_trafo": False,
+    "disparity_lines": False,
     "n_3_redundancy": True,
     "n_3_redundancy_print": True,
-    "GraphenTheorie": True,
+    "GraphenTheorie": False,
     "show_spider_plot": True,
     "print_results": True,
     "output_excel": False
