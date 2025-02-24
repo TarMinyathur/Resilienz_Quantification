@@ -5,12 +5,12 @@ import pandas as pd
 from functools import reduce
 epsilon = 1e-10
 
-def calculate_disparity_space(net, generation_factors):
+def calculate_disparity_space(net_temp, generation_factors):
     """
     Calculate the disparity matrix and maximum integral disparity value for power generation units.
 
     Args:
-        net (object): Network object containing sgen, storage, and gen DataFrames.
+        net_temp (object): Network object containing sgen, storage, and gen DataFrames.
         generation_factors (dict): Dictionary of generation factors keyed by type.
 
     Returns:
@@ -22,7 +22,7 @@ def calculate_disparity_space(net, generation_factors):
 
     # Ensure required columns and set NaN or missing values to 0
     for df_name in ['sgen', 'storage', 'gen']:
-        df = getattr(net, df_name)
+        df = getattr(net_temp, df_name)
         for col in ['p_mw', 'q_mvar', 'sn_mva']:
             if col not in df.columns:
                 df[col] = 0
@@ -31,31 +31,31 @@ def calculate_disparity_space(net, generation_factors):
 
     # Check for missing 'type' column and add if missing
     for df_name in ['sgen', 'storage', 'gen']:
-        df = getattr(net, df_name)
+        df = getattr(net_temp, df_name)
         if 'type' not in df.columns:
             df['type'] = 'default'
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all sgen at each bus
-    if not net.sgen.empty:
-        net.sgen['effective_sn_mva'] = net.sgen.apply(
+    if not net_temp.sgen.empty:
+        net_temp.sgen['effective_sn_mva'] = net_temp.sgen.apply(
             lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        sgen_sums = net.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        sgen_sums = net_temp.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
     else:
         sgen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all storage at each bus
-    if not net.storage.empty:
-        net.storage['effective_sn_mva'] = net.storage.apply(
+    if not net_temp.storage.empty:
+        net_temp.storage['effective_sn_mva'] = net_temp.storage.apply(
             lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        storage_sums = net.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        storage_sums = net_temp.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
     else:
         storage_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
     # Sum p_mw and sn_mva*generation_factor over all gen at each bus
-    if not net.gen.empty:
-        net.gen['effective_sn_mva'] = net.gen.apply(
+    if not net_temp.gen.empty:
+        net_temp.gen['effective_sn_mva'] = net_temp.gen.apply(
             lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        gen_sums = net.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        gen_sums = net_temp.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
         gen_sums['q_mvar'] = 0  # Add a zero q_mvar column to match other dataframes
     else:
         gen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
@@ -104,12 +104,12 @@ def calculate_disparity_space(net, generation_factors):
 
     return disparity_df, max_integral_value
 
-def calculate_load_disparity(net):
+def calculate_load_disparity(net_temp):
     """
     Calculate the disparity matrix and maximum integral disparity value for load characteristics.
 
     Args:
-        net (object): Network object containing load DataFrame with relevant columns.
+        net_temp (object): Network object containing load DataFrame with relevant columns.
 
     Returns:
         dict: {
@@ -121,34 +121,34 @@ def calculate_load_disparity(net):
     # Ensure required columns and set NaN or missing values to 0
     required_columns = ['p_mw', 'q_mvar', 'sn_mva', 'cos_phi', 'mode']
     for col in required_columns:
-        if col not in net.load.columns:
-            net.load[col] = np.nan
+        if col not in net_temp.load.columns:
+            net_temp.load[col] = np.nan
 
     # Calculate missing p_mw and q_mvar if cos_phi and sn_mva are available
-    if net.load['p_mw'].isnull().any() or net.load['q_mvar'].isnull().any():
-        net.load['p_mw'] = net.load.apply(
+    if net_temp.load['p_mw'].isnull().any() or net_temp.load['q_mvar'].isnull().any():
+        net_temp.load['p_mw'] = net_temp.load.apply(
             lambda row: row['sn_mva'] * row['cos_phi'] if pd.notna(row['sn_mva']) and pd.notna(row['cos_phi']) else row['p_mw'],
             axis=1
         )
-        net.load['q_mvar'] = net.load.apply(
+        net_temp.load['q_mvar'] = net_temp.load.apply(
             lambda row: row['sn_mva'] * np.sqrt(1 - row['cos_phi'] ** 2)
             if pd.notna(row['sn_mva']) and pd.notna(row['cos_phi']) else row['q_mvar'],
             axis=1
         )
 
     # Calculate sn_mva if missing
-    if net.load['sn_mva'].isnull().any():
-        net.load['sn_mva'] = net.load.apply(
+    if net_temp.load['sn_mva'].isnull().any():
+        net_temp.load['sn_mva'] = net_temp.load.apply(
             lambda row: np.sqrt(row['p_mw'] ** 2 + row['q_mvar'] ** 2)
             if pd.notna(row['p_mw']) and pd.notna(row['q_mvar']) else row['sn_mva'],
             axis=1
         )
 
     # Replace remaining NaN values with zeros
-    net.load.fillna(0, inplace=True)
+    net_temp.load.fillna(0, inplace=True)
 
     # Prepare data for disparity calculation
-    load_data = net.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
+    load_data = net_temp.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
 
     # Vectorized Disparity Matrix Calculation
     n = len(load_data)
@@ -176,12 +176,12 @@ def calculate_load_disparity(net):
     return disparity_df, max_integral_value
 
 
-def calculate_transformer_disparity(net, debug=False):
+def calculate_transformer_disparity(net_temp, debug=False):
     """
     Calculate the disparity matrix and maximum integral disparity value for transformer characteristics.
 
     Args:
-        net (object): Network object containing transformer DataFrame with relevant columns.
+        net_temp (object): Network object containing transformer DataFrame with relevant columns.
         debug (bool): If True, print debug information. Default is False.
 
     Returns:
@@ -192,15 +192,15 @@ def calculate_transformer_disparity(net, debug=False):
     required_columns = ['sn_mva', 'vn_hv_kv', 'vn_lv_kv', 'vkr_percent',
                         'vk_percent', 'pfe_kw', 'i0_percent', 'shift_degree']
     for column in required_columns:
-        if column not in net.trafo.columns:
-            raise ValueError(f"Ensure that '{column}' column exists in net.trafo")
+        if column not in net_temp.trafo.columns:
+            raise ValueError(f"Ensure that '{column}' column exists in net_temp.trafo")
 
     # Data Cleaning: Ensure all required columns are numeric and fill NaN with zero
     for column in required_columns:
-        net.trafo[column] = pd.to_numeric(net.trafo[column], errors='coerce').fillna(0)
+        net_temp.trafo[column] = pd.to_numeric(net_temp.trafo[column], errors='coerce').fillna(0)
 
     # Combine the metrics into a single dataframe
-    trafo_data = net.trafo[required_columns].copy()
+    trafo_data = net_temp.trafo[required_columns].copy()
 
     if debug:
         print("\nDebug: Transformer Data After Cleaning")
@@ -226,12 +226,12 @@ def calculate_transformer_disparity(net, debug=False):
     return disparity_df, max_integral_value
 
 
-def calculate_line_disparity(net, debug=False):
+def calculate_line_disparity(net_temp, debug=False):
     """
     Calculate the disparity matrix and maximum integral disparity value for line characteristics.
 
     Args:
-        net (object): Network object containing line DataFrame with relevant columns.
+        net_temp (object): Network object containing line DataFrame with relevant columns.
         debug (bool): If True, print debug information. Default is False.
 
     Returns:
@@ -242,26 +242,26 @@ def calculate_line_disparity(net, debug=False):
     required_columns = ['length_km', 'from_bus', 'to_bus', 'type',
                         'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']
     for column in required_columns:
-        if column not in net.line.columns:
-            raise ValueError(f"Ensure that '{column}' column exists in net.line")
+        if column not in net_temp.line.columns:
+            raise ValueError(f"Ensure that '{column}' column exists in net_temp.line")
 
     # Data Cleaning and Type Consistency
-    net.line['from_bus'] = net.line['from_bus'].astype(str).str.lower().str.strip().fillna("unknown")
-    net.line['to_bus'] = net.line['to_bus'].astype(str).str.lower().str.strip().fillna("unknown")
-    net.line['type'] = net.line['type'].astype(str).str.lower().str.strip().fillna("unknown")
+    net_temp.line['from_bus'] = net_temp.line['from_bus'].astype(str).str.lower().str.strip().fillna("unknown")
+    net_temp.line['to_bus'] = net_temp.line['to_bus'].astype(str).str.lower().str.strip().fillna("unknown")
+    net_temp.line['type'] = net_temp.line['type'].astype(str).str.lower().str.strip().fillna("unknown")
 
     # Normalize categorical columns
-    net.line['from_bus_norm'] = normalize_categorical(net.line['from_bus'])
-    net.line['to_bus_norm'] = normalize_categorical(net.line['to_bus'])
-    net.line['cable_type_norm'] = normalize_categorical(net.line['type'])
+    net_temp.line['from_bus_norm'] = normalize_categorical(net_temp.line['from_bus'])
+    net_temp.line['to_bus_norm'] = normalize_categorical(net_temp.line['to_bus'])
+    net_temp.line['cable_type_norm'] = normalize_categorical(net_temp.line['type'])
 
     if debug:
         print("\nDebug: Normalization Results")
-        print(net.line[['from_bus', 'from_bus_norm', 'to_bus',
+        print(net_temp.line[['from_bus', 'from_bus_norm', 'to_bus',
                         'to_bus_norm', 'type', 'cable_type_norm']].head())
 
     # Combine the metrics into a single dataframe
-    line_data = net.line[['length_km', 'from_bus_norm', 'to_bus_norm',
+    line_data = net_temp.line[['length_km', 'from_bus_norm', 'to_bus_norm',
                           'cable_type_norm', 'r_ohm_per_km',
                           'x_ohm_per_km', 'max_i_ka']].copy()
 

@@ -3,11 +3,13 @@
 import pandapower as pp
 import itertools
 import networkx as nx
+import pandapower.networks as pn
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
-def n_3_redundancy_check(net, element_counts):
+def n_3_redundancy_check(net_temp, element_counts):
     results = {
         "line": {"Success": 0, "Failed": 0},
         "switch": {"Success": 0, "Failed": 0},
@@ -20,13 +22,13 @@ def n_3_redundancy_check(net, element_counts):
 
     # Create combinations of three elements for each type
     element_triples = {
-        "line": list(itertools.combinations(net.line.index, min(3, element_counts["scaled_counts"]["line"]))) if not net.line.empty else [],
-        #"switch": list(itertools.combinations(net.switch.index, min(3, element_counts["scaled_counts"]["switch"]))) if not net.switch.empty else [],
-        #"load": list(itertools.combinations(net.load.index, min(3, element_counts["scaled_counts"]["load"]))) if not net.load.empty else [],
-        "sgen": list(itertools.combinations(net.sgen.index, min(3, element_counts["scaled_counts"]["sgen"]))) if not net.sgen.empty else [],
-        "trafo": list(itertools.combinations(net.trafo.index, min(3, element_counts["scaled_counts"]["trafo"]))) if not net.trafo.empty else [],
-        "bus": list(itertools.combinations(net.bus.index, min(3, element_counts["scaled_counts"]["bus"]))) if not net.bus.empty else [],
-        "storage": list(itertools.combinations(net.storage.index, min(3, element_counts["scaled_counts"]["storage"]))) if not net.storage.empty else []
+        "line": list(itertools.combinations(net_temp.line.index, min(3, element_counts["scaled_counts"]["line"]))) if not net_temp.line.empty else [],
+        #"switch": list(itertools.combinations(net_temp.switch.index, min(3, element_counts["scaled_counts"]["switch"]))) if not net_temp.switch.empty else [],
+        #"load": list(itertools.combinations(net_temp.load.index, min(3, element_counts["scaled_counts"]["load"]))) if not net_temp.load.empty else [],
+        "sgen": list(itertools.combinations(net_temp.sgen.index, min(3, element_counts["scaled_counts"]["sgen"]))) if not net_temp.sgen.empty else [],
+        "trafo": list(itertools.combinations(net_temp.trafo.index, min(3, element_counts["scaled_counts"]["trafo"]))) if not net_temp.trafo.empty else [],
+        "bus": list(itertools.combinations(net_temp.bus.index, min(3, element_counts["scaled_counts"]["bus"]))) if not net_temp.bus.empty else [],
+        "storage": list(itertools.combinations(net_temp.storage.index, min(3, element_counts["scaled_counts"]["storage"]))) if not net_temp.storage.empty else []
 
     }
 
@@ -36,9 +38,9 @@ def n_3_redundancy_check(net, element_counts):
         for element_type, triples in element_triples.items():
             for triple in triples:
                 # Create a shallow copy of the network to simulate the failures
-                net_temp = net.deepcopy()
+                net_temp = net_temp.deepcopy()
 
-                # pass copied net
+                # pass copied net_temp
                 futures.append(executor.submit(process_triple, element_type, triple, net_temp))
 
         for future in futures:
@@ -98,26 +100,26 @@ def process_triple(element_type, triple, net_temp):
         print(f"Unexpected error for {element_type} with triple {triple} using init='pf': {e}")
         return element_type, "Failed"
 
-def is_graph_connected(net, out_of_service_elements):
+def is_graph_connected(net_temp, out_of_service_elements):
     # Create NetworkX graph manually
     G = nx.Graph()
 
     # Add buses
-    for bus in net.bus.itertuples():
+    for bus in net_temp.bus.itertuples():
         if bus.Index not in out_of_service_elements.get('line', []):
-            G.add_nodes_from(net.bus.index)
+            G.add_nodes_from(net_temp.bus.index)
 
     # Add lines
-    for line in net.line.itertuples():
+    for line in net_temp.line.itertuples():
         if line.Index not in out_of_service_elements.get('line', []):
             #G.add_edge(line.from_bus, line.to_bus)
-            for idx, line in net.line.iterrows():
+            for idx, line in net_temp.line.iterrows():
                 from_bus = line.from_bus
                 to_bus = line.to_bus
 
                 # Check if there is a switch between from_bus and to_bus
                 switch_exists = False
-                for _, switch in net.switch.iterrows():
+                for _, switch in net_temp.switch.iterrows():
                     if switch.bus == from_bus and switch.element == to_bus and switch.et == 'l':
                         switch_exists = True
                         switch_closed = switch.closed
@@ -132,7 +134,7 @@ def is_graph_connected(net, out_of_service_elements):
                     G.add_edge(from_bus, to_bus)
 
     # Add transformers
-    for trafo in net.trafo.itertuples():
+    for trafo in net_temp.trafo.itertuples():
         if trafo.Index not in out_of_service_elements.get('trafo', []):
             G.add_edge(trafo.hv_bus, trafo.lv_bus)
 

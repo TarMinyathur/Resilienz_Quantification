@@ -32,7 +32,7 @@ basic = {
     "Overview_Grid": True
 }
 
-if basic["Grid"] == "mv_all":
+if basic["Grid"] == "mv_all_high10":
     net = pn.create_cigre_network_mv('all')
 elif basic["Grid"] == "mv_all_high10":
     net = pn.create_cigre_network_mv('all')
@@ -102,6 +102,7 @@ if basic["Adjustements"]:
 
 
 selected_indicators = {
+    "all": True,
     "self_sufficiency": True,
     "show_self_sufficiency_at_bus": False,
     "system_self_sufficiency": False,
@@ -122,6 +123,12 @@ selected_indicators = {
     "print_results": True,
     "output_excel": False
 }
+
+if selected_indicators["all"]:
+    # Setze alle anderen Indikatoren auf True
+    for key in selected_indicators:
+        if key != "all":  # 'all' selbst bleibt unverändert
+            selected_indicators[key] = True
 
 if selected_indicators["self_sufficiency"]:
     # Calculate generation factors
@@ -163,46 +170,6 @@ if selected_indicators["load_shannon_evenness"]:
     dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
     if selected_indicators["load_variety"]:
         dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
-
-if selected_indicators["disparity_generators"]:
-    if not selected_indicators["self_sufficiency"]:
-        # Calculate generation factors
-        generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
-
-    # Calculate disparity space
-    disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)
-
-    # Compute the integral (sum) over the entire DataFrame
-    integral_value_gen = disparity_df_gen.values.sum()
-    #print(f"Disparity Integral Generators: {integral_value_gen}")
-    #print(f"Disparity Integral max Loads: {max_integral_gen}")
-
-    ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
-    dfinalresults = add_indicator(dfinalresults, 'Disparity Generators',
-                                  ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
-
-if selected_indicators["disparity_load"]:
-    disparity_df_load, max_integral_load = calculate_load_disparity(net)
-    integral_value_load = disparity_df_load.values.sum()
-    ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load,integral_value_load / max_integral_load)
-    dfinalresults = add_indicator(dfinalresults, 'Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
-
-if selected_indicators["disparity_trafo"]:
-    disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
-    integral_value_trafo = disparity_df_trafo.values.sum()
-    if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
-        print("Disperity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
-        ddisparity = add_disparity(ddisparity, 'Trafo', 0, max_int_trafo,0)
-    else:
-        ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
-
-    dfinalresults = add_indicator(dfinalresults, 'Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
-
-if selected_indicators["disparity_lines"]:
-    disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
-    integral_value_line = disparity_df_lines.values.sum()
-    ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
-    dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
 if selected_indicators["n_3_redundancy"]:
     if not basic["Overview_Grid"]:
@@ -258,6 +225,46 @@ if selected_indicators["GraphenTheorie"]:
         G = G.subgraph(largest_component).copy()
 
     GraphenTheorieIndicator(G, dfinalresults)
+
+if selected_indicators["disparity_generators"]:
+    if not selected_indicators["self_sufficiency"]:
+        # Calculate generation factors
+        generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
+
+    # Calculate disparity space
+    disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)
+
+    # Compute the integral (sum) over the entire DataFrame
+    integral_value_gen = disparity_df_gen.values.sum()
+    #print(f"Disparity Integral Generators: {integral_value_gen}")
+    #print(f"Disparity Integral max Loads: {max_integral_gen}")
+
+    ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Generators',
+                                  ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
+
+if selected_indicators["disparity_load"]:
+    disparity_df_load, max_integral_load = calculate_load_disparity(net)
+    integral_value_load = disparity_df_load.values.sum()
+    ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load,integral_value_load / max_integral_load)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
+
+if selected_indicators["disparity_trafo"]:
+    disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
+    integral_value_trafo = disparity_df_trafo.values.sum()
+    if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
+        print("Disperity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
+        ddisparity = add_disparity(ddisparity, 'Trafo', 0, max_int_trafo,0)
+    else:
+        ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
+
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
+
+if selected_indicators["disparity_lines"]:
+    disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
+    integral_value_line = disparity_df_lines.values.sum()
+    ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
+    dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
 if selected_indicators["show_spider_plot"]:
     plot_spider_chart(dfinalresults)

@@ -8,47 +8,76 @@ import numpy as np
 import time
 
 
-def selfsuff(net, gen_factor, show_self_sufficiency_at_bus):
+def selfsuff(net_temp, gen_factor, show_self_sufficiency_at_bus):
     """
     Berechnet die Eigenversorgung eines Stromnetzes effizienter durch Vektorisierung und optimierte Berechnungen.
     Berücksichtigt dabei die gesicherten Erzeugungswerte anhand der Faktoren in gen_factor, inklusive Batterien.
 
     Parameter:
-        net (pandapowerNet): Das Netzobjekt mit den Informationen zu Erzeugern, Lasten und Speichern.
+        net_temp (pandapowerNet): Das Netzobjekt mit den Informationen zu Erzeugern, Lasten und Speichern.
         gen_factor (dict): Ein Dictionary mit Faktoren für die gesicherten Erzeugungswerte der verschiedenen Erzeugungstechnologien.
     """
     erfolg = 0
     misserfolg = 0
 
     # Vektorisierte Berechnung für jeden Bus
-    for bus in net.bus.index:
+    for bus in net_temp.bus.index:
         # Gesicherte Erzeugungsleistung für gen und sgen berechnen
-        gen_bus = net.gen[net.gen.bus == bus]
-        sgen_bus = net.sgen[net.sgen.bus == bus]
-        storage_bus = net.storage[net.storage.bus == bus]
+        gen_bus = net_temp.gen[net_temp.gen.bus == bus]
+        sgen_bus = net_temp.sgen[net_temp.sgen.bus == bus]
+        storage_bus = net_temp.storage[net_temp.storage.bus == bus]
 
         # Gesicherte Leistung für gen
-        gen_p = np.sum([row.p_mw * gen_factor.get(row.type, 1.0) for _, row in gen_bus.iterrows()])
+        gen_p = 0
+        gen_q = 0
+        gen_s = 0
+        for _, row in gen_bus.iterrows():
+            factor = gen_factor.get(row.type, 1.0)
+            p = row.p_mw * factor
+            pf = gen_factor.get(f"{row.type}_pf", 0.95)  # Leistungsfaktor für gen Type
+            q = p * np.tan(np.arccos(pf))
+            s = np.sqrt(p**2 + q**2)
+            gen_p += p
+            gen_q += q
+            gen_s += s
 
         # Gesicherte Leistung für sgen
-        sgen_p = np.sum([row.p_mw * gen_factor.get(row.type, 1.0) for _, row in sgen_bus.iterrows()])
-        sgen_q = sgen_bus.q_mvar.fillna(0).sum()
-
-        # Scheinleistung für sgen
-        sgen_s = np.sqrt((sgen_bus.p_mw ** 2 + sgen_bus.q_mvar ** 2)).sum()
+        sgen_p = 0
+        sgen_q = 0
+        sgen_s = 0
+        for _, row in sgen_bus.iterrows():
+            factor = gen_factor.get(row.type, 1.0)
+            p = row.p_mw * factor
+            q = row.q_mvar if not np.isnan(row.q_mvar) else 0
+            pf = gen_factor.get(f"{row.type}_pf", 0.95)  # Leistungsfaktor für sgen Type
+            if q == 0:  # Falls q nicht vorhanden ist, aus pf berechnen
+                q = p * np.tan(np.arccos(pf))
+            s = np.sqrt(p**2 + q**2)
+            sgen_p += p
+            sgen_q += q
+            sgen_s += s
 
         # Gesicherte Leistung für Batteriespeicher
-        battery_factor = gen_factor.get("Battery", 1.0)
-        storage_p = storage_bus.p_mw.sum() * battery_factor
-        storage_s = storage_bus.p_mw.sum() * battery_factor
+        storage_p = 0
+        storage_q = 0
+        storage_s = 0
+        for _, row in storage_bus.iterrows():
+            factor = gen_factor.get("Battery", 1.0)
+            p = row.p_mw * factor
+            pf = gen_factor.get("Battery_pf", 0.95)  # Leistungsfaktor für Batterien
+            q = p * np.tan(np.arccos(pf))
+            s = np.sqrt(p**2 + q**2)
+            storage_p += p
+            storage_q += q
+            storage_s += s
 
         # Gesamte Erzeugung am Bus
         generation_p = gen_p + sgen_p + storage_p
-        generation_q = sgen_q
-        generation_s = sgen_s + storage_s
+        generation_q = gen_q + sgen_q + storage_q
+        generation_s = np.sqrt(generation_p**2 + generation_q**2)  # Konsistente Berechnung
 
         # Lasten berechnen
-        load_bus = net.load[net.load.bus == bus]
+        load_bus = net_temp.load[net_temp.load.bus == bus]
         demand_p = load_bus.p_mw.sum()
         demand_q = load_bus.q_mvar.sum()
         demand_s = np.sqrt((load_bus.p_mw ** 2 + load_bus.q_mvar ** 2)).sum()
@@ -78,7 +107,7 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
     Testet, bis zu welchem Grad die Netzgrenzen reduziert werden können, bevor OPF nicht mehr konvergiert.
 
     Parameter:
-    - net: pandapower Netz
+    - net_temp: pandapower Netz
     - reduction_factor: Pro Schritt Reduktion der Netzgrenzen (Standard: 95% der vorherigen Werte)
     - min_threshold: Untere Grenze für die Reduktion (Standard: 95% der ursprünglichen Werte)
 
@@ -88,7 +117,7 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
     results = []
 
     # Originalwerte speichern
-    #net = grid.copy
+    #net_temp = grid.copy
     ext_grid = grid.ext_grid.copy
     tempresults = 1
 
