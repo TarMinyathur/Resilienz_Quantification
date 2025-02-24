@@ -23,7 +23,7 @@ from self_sufficiency import selfsufficiency_neu
 dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
 ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
-# Basic initialisation of different test grids via "Grid": "mv_all"; "mv_pv_wind"; "mv_no_renew"; "lv"; "new"
+# Basic initialisation of different test grids via "Grid": "mv_all"; "mv_pv_wind"; "mv_no_renew"; "lv"; "new"; "mv_all_high5"; "mv_all_high10"
 #initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
 
 basic = {
@@ -102,7 +102,8 @@ if basic["Adjustements"]:
 
 
 selected_indicators = {
-    "self_sufficiency": False,
+    "self_sufficiency": True,
+    "show_self_sufficiency_at_bus": False,
     "system_self_sufficiency": False,
     "generation_shannon_evenness": False,
     "generation_variety": False,
@@ -123,7 +124,10 @@ selected_indicators = {
 }
 
 if selected_indicators["self_sufficiency"]:
-    indi_selfsuff = float(selfsuff(net))
+    # Calculate generation factors
+    generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
+    #print(f"{generation_factors}")
+    indi_selfsuff = float(selfsuff(net,generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
     dfinalresults = add_indicator(dfinalresults, 'self sufficiency at bus level', indi_selfsuff)
 
 if selected_indicators["system_self_sufficiency"]:
@@ -161,8 +165,9 @@ if selected_indicators["load_shannon_evenness"]:
         dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
 
 if selected_indicators["disparity_generators"]:
-    # Calculate generation factors
-    generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
+    if not selected_indicators["self_sufficiency"]:
+        # Calculate generation factors
+        generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
 
     # Calculate disparity space
     disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)

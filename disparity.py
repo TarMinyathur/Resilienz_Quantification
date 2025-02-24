@@ -2,11 +2,23 @@
 
 import numpy as np
 import pandas as pd
+from functools import reduce
+epsilon = 1e-10
 
 def calculate_disparity_space(net, generation_factors):
-    # Ensure that sgen, gen, and storage have the required columns
-    required_columns_sgen_storage = ['bus', 'p_mw', 'q_mvar', 'sn_mva', 'type']
-    required_columns_gen = ['bus', 'p_mw', 'sn_mva', 'type']
+    """
+    Calculate the disparity matrix and maximum integral disparity value for power generation units.
+
+    Args:
+        net (object): Network object containing sgen, storage, and gen DataFrames.
+        generation_factors (dict): Dictionary of generation factors keyed by type.
+
+    Returns:
+        dict: {
+            'disparity_matrix': pd.DataFrame,  # Euclidean distance matrix between buses
+            'max_integral_value': float         # Maximum integral value of disparity
+        }
+    """
 
     # Ensure required columns and set NaN or missing values to 0
     for df_name in ['sgen', 'storage', 'gen']:
@@ -15,13 +27,13 @@ def calculate_disparity_space(net, generation_factors):
             if col not in df.columns:
                 df[col] = 0
             else:
-                df[col] = df[col].fillna(0)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     # Check for missing 'type' column and add if missing
     for df_name in ['sgen', 'storage', 'gen']:
         df = getattr(net, df_name)
         if 'type' not in df.columns:
-            df['type'] = 'default'  # You can change 'default' to any default type you prefer
+            df['type'] = 'default'
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all sgen at each bus
     if not net.sgen.empty:
@@ -41,253 +53,262 @@ def calculate_disparity_space(net, generation_factors):
 
     # Sum p_mw and sn_mva*generation_factor over all gen at each bus
     if not net.gen.empty:
-        net.gen['effective_sn_mva'] = net.gen.apply(lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1),
-                                                    axis=1)
+        net.gen['effective_sn_mva'] = net.gen.apply(
+            lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
         gen_sums = net.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
         gen_sums['q_mvar'] = 0  # Add a zero q_mvar column to match other dataframes
     else:
         gen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
-    #print(gen_sums)
-    #print(sgen_sums)
-    #print(storage_sums)
+    # Efficient Merging using reduce
+    sum_dfs = [sgen_sums, storage_sums, gen_sums]
+    total_sums = reduce(lambda left, right: pd.merge(left, right, on='bus', how='outer').fillna(0), sum_dfs)
 
-    # Merge the sums from sgen, storage, and gen
-    total_sums = pd.merge(sgen_sums, storage_sums, on='bus', how='outer', suffixes=('_sgen', '_storage')).fillna(0)
-    total_sums = pd.merge(total_sums, gen_sums, on='bus', how='outer', suffixes=('', '_gen')).fillna(0)
+    # Sum relevant columns
+    total_sums['p_mw'] = total_sums['p_mw_x'] + total_sums.get('p_mw_y', 0) + total_sums.get('p_mw', 0)
+    total_sums['q_mvar'] = total_sums['q_mvar_x'] + total_sums.get('q_mvar_y', 0) + total_sums.get('q_mvar', 0)
+    total_sums['effective_sn_mva'] = (
+        total_sums['effective_sn_mva_x'] +
+        total_sums.get('effective_sn_mva_y', 0) +
+        total_sums.get('effective_sn_mva', 0)
+    )
+    total_sums['sn_mva'] = total_sums['sn_mva_x'] + total_sums.get('sn_mva_y', 0) + total_sums.get('sn_mva', 0)
 
-    #print(total_sums)
+    # Select relevant columns
+    total_sums = total_sums[['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']]
 
-    # Sum the relevant columns
-    total_sums['p_mw'] = total_sums['p_mw'] + total_sums.get('p_mw_storage', 0) + total_sums.get('p_mw_gen', 0)
-    total_sums['q_mvar'] = total_sums['q_mvar'] + total_sums.get('q_mvar_storage', 0) + total_sums.get('q_mvar_gen', 0)
-    total_sums['effective_sn_mva'] = (total_sums['effective_sn_mva'] + total_sums.get('effective_sn_mva_storage', 0) + total_sums.get('effective_sn_mva_gen', 0))
-    total_sums['sn_mva'] = total_sums['sn_mva'] + total_sums.get('sn_mva_storage', 0) + total_sums.get('sn_mva_gen', 0)
-
-    #print(total_sums)
-
-    # Select only the relevant columns
-    total_sums = total_sums[['bus', 'p_mw_sgen', 'q_mvar_sgen', 'effective_sn_mva_sgen', 'sn_mva_sgen']]
-    total_sums = total_sums.rename(columns={
-        'p_mw_sgen': 'p_mw',
-        'q_mvar_sgen': 'q_mvar',
-        'effective_sn_mva_sgen': 'effective_sn_mva',
-        'sn_mva_sgen': 'sn_mva'
-    })
-
-    print(total_sums)
-
-    # Create disparity matrix (Euclidean distance between summed p_mw, q_mvar, and effective_sn_mva)
+    # Vectorized Disparity Matrix Calculation
     n = len(total_sums)
-    disparity_matrix = np.zeros((n, n))
+    p_diff = total_sums['p_mw'].values[:, None] - total_sums['p_mw'].values
+    q_diff = total_sums['q_mvar'].values[:, None] - total_sums['q_mvar'].values
+    sn_diff = total_sums['sn_mva'].values[:, None] - total_sums['sn_mva'].values
+    eff_sn_diff = total_sums['effective_sn_mva'].values[:, None] - total_sums['effective_sn_mva'].values
 
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt(
-                    (total_sums.p_mw.iloc[i] - total_sums.p_mw.iloc[j]) ** 2 +
-                    (total_sums.q_mvar.iloc[i] - total_sums.q_mvar.iloc[j]) ** 2 +
-                    (total_sums.effective_sn_mva.iloc[i] - total_sums.effective_sn_mva.iloc[j]) ** 2 +
-                    (total_sums.sn_mva.iloc[i] - total_sums.sn_mva.iloc[j]) ** 2
-                )
+    # Vectorized calculation of Euclidean distance
+    disparity_matrix = np.sqrt(p_diff**2 + q_diff**2 + sn_diff**2 + eff_sn_diff**2)
+    np.fill_diagonal(disparity_matrix, 0)  # Set diagonal to zero
 
     # Convert to DataFrame for easier handling
-    disparity_df = pd.DataFrame(disparity_matrix, index=total_sums.bus, columns=total_sums.bus)
+    disparity_df = pd.DataFrame(disparity_matrix, index=total_sums['bus'], columns=total_sums['bus'])
 
-    # Calculate maximum disparity
+    # Maximum Disparity and Integral Calculation
     max_p = total_sums['p_mw'].max()
     max_q = total_sums['q_mvar'].max()
     max_sn = total_sums['sn_mva'].max()
     max_eff = total_sums['effective_sn_mva'].max()
     max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_eff ** 2 + max_sn ** 2)
 
-
-    # Calculate theoretical maximum integral value of disparity
+    # Use a small epsilon instead of max(1, value)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
-    max_integral_value = max(1, max_integral_value)
+    max_integral_value = max(epsilon, max_integral_value)
 
     return disparity_df, max_integral_value
 
 def calculate_load_disparity(net):
-    # Ensure load DataFrame has the required columns
-    # Ensure the required columns exist
-    if 'p_mw' not in net.load.columns or 'q_mvar' not in net.load.columns:
-        # Calculate missing p_mw and q_mvar if cos_phi and mode are available
-        if 'cos_phi' in net.load.columns and 'mode' in net.load.columns:
-            net.load['p_mw'] = net.load.apply(lambda row: row['sn_mva'] * row['cos_phi'], axis=1)
-            net.load['q_mvar'] = net.load.apply(lambda row: row['sn_mva'] * np.sqrt(1 - row['cos_phi'] ** 2), axis=1)
-        else:
-            raise ValueError("Missing required columns and unable to calculate due to missing cos_phi or mode.")
+    """
+    Calculate the disparity matrix and maximum integral disparity value for load characteristics.
 
-    # Replace missing sn_mva or NaN with zero and calculate if necessary
-    if 'sn_mva' not in net.load.columns or net.load['sn_mva'].isnull().any():
-        if 'cos_phi' in net.load.columns:
-            net.load['sn_mva'] = net.load['sn_mva'].fillna(0)
-            net.load.loc[net.load['sn_mva'] == 0, 'sn_mva'] = net.load.apply(
-                lambda row: row['p_mw'] / row['cos_phi'], axis=1)
-        else:
-            net.load['sn_mva'] = np.sqrt(net.load['p_mw'] ** 2 + net.load['q_mvar'] ** 2)
-            # net.load['cos_phi'] = 1  # Assume cos_phi is 1 when not existing
-            # net.load['sn_mva'] = net.load['sn_mva'].fillna(0)
-            # net.load.loc[net.load['sn_mva'] == 0, 'sn_mva'] = net.load[
-            #     'p_mw']  # Use p_mw directly if cos_phi is assumed 1
+    Args:
+        net (object): Network object containing load DataFrame with relevant columns.
 
-    # Ensure required columns are present after potential calculations
-    required_columns = ['sn_mva', 'p_mw', 'q_mvar']
+    Returns:
+        dict: {
+            'disparity_matrix': pd.DataFrame,  # Euclidean distance matrix between loads
+            'max_integral_value': float         # Maximum integral value of disparity
+        }
+    """
 
-    for column in required_columns:
-        if column not in net.load.columns:
-            print(f"Ensure that '{column}' column exists in net.load DataFrame")
-            return None
+    # Ensure required columns and set NaN or missing values to 0
+    required_columns = ['p_mw', 'q_mvar', 'sn_mva', 'cos_phi', 'mode']
+    for col in required_columns:
+        if col not in net.load.columns:
+            net.load[col] = np.nan
+
+    # Calculate missing p_mw and q_mvar if cos_phi and sn_mva are available
+    if net.load['p_mw'].isnull().any() or net.load['q_mvar'].isnull().any():
+        net.load['p_mw'] = net.load.apply(
+            lambda row: row['sn_mva'] * row['cos_phi'] if pd.notna(row['sn_mva']) and pd.notna(row['cos_phi']) else row['p_mw'],
+            axis=1
+        )
+        net.load['q_mvar'] = net.load.apply(
+            lambda row: row['sn_mva'] * np.sqrt(1 - row['cos_phi'] ** 2)
+            if pd.notna(row['sn_mva']) and pd.notna(row['cos_phi']) else row['q_mvar'],
+            axis=1
+        )
+
+    # Calculate sn_mva if missing
+    if net.load['sn_mva'].isnull().any():
+        net.load['sn_mva'] = net.load.apply(
+            lambda row: np.sqrt(row['p_mw'] ** 2 + row['q_mvar'] ** 2)
+            if pd.notna(row['p_mw']) and pd.notna(row['q_mvar']) else row['sn_mva'],
+            axis=1
+        )
+
+    # Replace remaining NaN values with zeros
+    net.load.fillna(0, inplace=True)
 
     # Prepare data for disparity calculation
-    load_data = net.load[['sn_mva', 'p_mw', 'q_mvar']].copy()
+    load_data = net.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
 
-    # Select relevant columns for disparity calculation
-    load_data = load_data[['p_mw', 'q_mvar', 'sn_mva']]
-
-    # Calculate disparity matrix (Euclidean distance between load characteristics)
+    # Vectorized Disparity Matrix Calculation
     n = len(load_data)
-    disparity_matrix = np.zeros((n, n))
+    p_diff = load_data['p_mw'].values[:, None] - load_data['p_mw'].values
+    q_diff = load_data['q_mvar'].values[:, None] - load_data['q_mvar'].values
+    sn_diff = load_data['sn_mva'].values[:, None] - load_data['sn_mva'].values
 
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt((load_data.p_mw.iloc[i] - load_data.p_mw.iloc[j]) ** 2 +
-                                                 (load_data.q_mvar.iloc[i] - load_data.q_mvar.iloc[j]) ** 2 +
-                                                 (load_data.sn_mva.iloc[i] - load_data.sn_mva.iloc[j]) ** 2 )
+    # Vectorized calculation of Euclidean distance
+    disparity_matrix = np.sqrt(p_diff**2 + q_diff**2 + sn_diff**2)
+    np.fill_diagonal(disparity_matrix, 0)  # Set diagonal to zero
 
     # Convert to DataFrame for easier handling
     disparity_df = pd.DataFrame(disparity_matrix, index=load_data.index, columns=load_data.index)
 
+    # Maximum Disparity and Integral Calculation
     max_p = load_data['p_mw'].max()
     max_q = load_data['q_mvar'].max()
     max_sn = load_data['sn_mva'].max()
     max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_sn ** 2)
-    n = len(load_data)
+
+    # Use a small epsilon instead of max(1, value)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
+    max_integral_value = max(epsilon, max_integral_value)
 
     return disparity_df, max_integral_value
 
-def calculate_transformer_disparity(net):
+
+def calculate_transformer_disparity(net, debug=False):
+    """
+    Calculate the disparity matrix and maximum integral disparity value for transformer characteristics.
+
+    Args:
+        net (object): Network object containing transformer DataFrame with relevant columns.
+        debug (bool): If True, print debug information. Default is False.
+
+    Returns:
+        tuple: disparity_df (pd.DataFrame), max_integral_value (float)
+    """
+
     # Ensure that transformer has the required columns
     required_columns = ['sn_mva', 'vn_hv_kv', 'vn_lv_kv', 'vkr_percent',
                         'vk_percent', 'pfe_kw', 'i0_percent', 'shift_degree']
     for column in required_columns:
         if column not in net.trafo.columns:
-            print(f"Ensure that '{column}' column exists in net.trafo")
-            return None
+            raise ValueError(f"Ensure that '{column}' column exists in net.trafo")
+
+    # Data Cleaning: Ensure all required columns are numeric and fill NaN with zero
+    for column in required_columns:
+        net.trafo[column] = pd.to_numeric(net.trafo[column], errors='coerce').fillna(0)
 
     # Combine the metrics into a single dataframe
-    trafo_data = net.trafo[required_columns]
+    trafo_data = net.trafo[required_columns].copy()
 
-    # Create disparity matrix (Euclidean distance between combined metrics)
+    if debug:
+        print("\nDebug: Transformer Data After Cleaning")
+        print(trafo_data.head())
+
+    # Vectorized Disparity Matrix Calculation
     n = len(trafo_data)
-    disparity_matrix = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt(
-                    (trafo_data.sn_mva.iloc[i] - trafo_data.sn_mva.iloc[j]) ** 2 +
-                    (trafo_data.vn_hv_kv.iloc[i] - trafo_data.vn_hv_kv.iloc[j]) ** 2 +
-                    (trafo_data.vn_lv_kv.iloc[i] - trafo_data.vn_lv_kv.iloc[j]) ** 2 +
-                    (trafo_data.vkr_percent.iloc[i] - trafo_data.vkr_percent.iloc[j]) ** 2 +
-                    (trafo_data.vk_percent.iloc[i] - trafo_data.vk_percent.iloc[j]) ** 2 +
-                    (trafo_data.pfe_kw.iloc[i] - trafo_data.pfe_kw.iloc[j]) ** 2 +
-                    (trafo_data.i0_percent.iloc[i] - trafo_data.i0_percent.iloc[j]) ** 2 +
-                    (trafo_data.shift_degree.iloc[i] - trafo_data.shift_degree.iloc[j]) ** 2
-                )
+    metrics = trafo_data.values
+    diff = metrics[:, None, :] - metrics[None, :, :]
+    disparity_matrix = np.sqrt(np.sum(diff ** 2, axis=2))
+    np.fill_diagonal(disparity_matrix, 0)  # Set diagonal to zero
 
     # Convert to DataFrame for easier handling
     disparity_df = pd.DataFrame(disparity_matrix, index=trafo_data.index, columns=trafo_data.index)
 
-    # max disparity
-    max_sn = trafo_data['sn_mva'].max()
-    max_vnhv = trafo_data['vn_hv_kv'].max()
-    max_vnlv = trafo_data['vn_lv_kv'].max()
-    max_vkr = trafo_data['vkr_percent'].max()
-    max_vk = trafo_data['vk_percent'].max()
-    max_pfe = trafo_data['pfe_kw'].max()
-    max_i0 = trafo_data['i0_percent'].max()
-    max_sh = trafo_data['shift_degree'].max()
+    # Maximum Disparity and Integral Calculation
+    max_values = trafo_data.max()
+    max_disparity = np.sqrt(np.sum(max_values ** 2))
 
-    max_disparity = np.sqrt(max_sn ** 2 + max_vnhv ** 2 + max_vnlv **2 + max_vkr **2 + max_vk **2 + max_pfe **2 + max_i0 **2 + max_sh **2)
-    n = len(trafo_data)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
+    max_integral_value = max(epsilon, max_integral_value)
 
-    # # Visualize the disparity matrix
-    # plt.figure(figsize=(10, 8))
-    # sns.heatmap(disparity_df, cmap='viridis', annot=True, fmt='.2f')
-    # plt.title('Disparity Space for Transformers')
-    # plt.xlabel('Transformer Index')
-    # plt.ylabel('Transformer Index')
-    # plt.show()
+    return disparity_df, max_integral_value
 
-    return disparity_df,max_integral_value
 
-def calculate_line_disparity(net):
+def calculate_line_disparity(net, debug=False):
+    """
+    Calculate the disparity matrix and maximum integral disparity value for line characteristics.
+
+    Args:
+        net (object): Network object containing line DataFrame with relevant columns.
+        debug (bool): If True, print debug information. Default is False.
+
+    Returns:
+        tuple: disparity_df (pd.DataFrame), max_integral_value (float)
+    """
+
     # Ensure that line has the required columns
-    required_columns = ['length_km', 'from_bus', 'to_bus', 'type', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']
+    required_columns = ['length_km', 'from_bus', 'to_bus', 'type',
+                        'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']
     for column in required_columns:
         if column not in net.line.columns:
-            print(f"Ensure that '{column}' column exists in net.line")
-            return None
+            raise ValueError(f"Ensure that '{column}' column exists in net.line")
 
+    # Data Cleaning and Type Consistency
+    net.line['from_bus'] = net.line['from_bus'].astype(str).str.lower().str.strip().fillna("unknown")
+    net.line['to_bus'] = net.line['to_bus'].astype(str).str.lower().str.strip().fillna("unknown")
+    net.line['type'] = net.line['type'].astype(str).str.lower().str.strip().fillna("unknown")
+
+    # Normalize categorical columns
     net.line['from_bus_norm'] = normalize_categorical(net.line['from_bus'])
     net.line['to_bus_norm'] = normalize_categorical(net.line['to_bus'])
     net.line['cable_type_norm'] = normalize_categorical(net.line['type'])
 
+    if debug:
+        print("\nDebug: Normalization Results")
+        print(net.line[['from_bus', 'from_bus_norm', 'to_bus',
+                        'to_bus_norm', 'type', 'cable_type_norm']].head())
+
     # Combine the metrics into a single dataframe
-    line_data = net.line[['length_km', 'from_bus_norm', 'to_bus_norm', 'cable_type_norm', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']]
+    line_data = net.line[['length_km', 'from_bus_norm', 'to_bus_norm',
+                          'cable_type_norm', 'r_ohm_per_km',
+                          'x_ohm_per_km', 'max_i_ka']].copy()
 
-    # Create disparity matrix (Euclidean distance between combined metrics)
+    # Vectorized Disparity Matrix Calculation
     n = len(line_data)
-    disparity_matrix = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                disparity_matrix[i, j] = np.sqrt(
-                    (line_data.length_km.iloc[i] - line_data.length_km.iloc[j]) ** 2 +
-                    (line_data.from_bus_norm.iloc[i] - line_data.from_bus_norm.iloc[j]) ** 2 +
-                    (line_data.to_bus_norm.iloc[i] - line_data.to_bus_norm.iloc[j]) ** 2 +
-                    (line_data.cable_type_norm.iloc[i] - line_data.cable_type_norm.iloc[j]) ** 2 +
-                    (line_data.r_ohm_per_km.iloc[i] - line_data.r_ohm_per_km.iloc[j]) ** 2 +
-                    (line_data.x_ohm_per_km.iloc[i] - line_data.x_ohm_per_km.iloc[j]) ** 2 +
-                    (line_data.max_i_ka.iloc[i] - line_data.max_i_ka.iloc[j]) ** 2
-                )
+    metrics = line_data.values
+    diff = metrics[:, None, :] - metrics[None, :, :]
+    disparity_matrix = np.sqrt(np.sum(diff ** 2, axis=2))
+    np.fill_diagonal(disparity_matrix, 0)  # Set diagonal to zero
 
     # Convert to DataFrame for easier handling
     disparity_df = pd.DataFrame(disparity_matrix, index=line_data.index, columns=line_data.index)
 
-    # Print both counts in one row
-    print("Bus | Original | Normed ")
-    print("-" * 45)
-    for k in range(len(net.line)):
-        normed = net.line['to_bus_norm'][k]
-        original = net.line['to_bus'][k]
-        print(f"{k:<12} | {original:<14} | {normed:<20}")
+    # Maximum Disparity and Integral Calculation
+    max_values = line_data.max()
+    max_disparity = np.sqrt(np.sum(max_values ** 2))
 
-    # max disparity
-    max_length = net.line['length_km'].max()
-    max_fbm = net.line['from_bus_norm'].max()
-    max_tbm = net.line['to_bus_norm'].max()
-    max_ctn = net.line['cable_type_norm'].max()
-    max_ohm = net.line['r_ohm_per_km'].max()
-    max_xohm = net.line['x_ohm_per_km'].max()
-    max_ika = net.line['max_i_ka'].max()
-
-    max_disparity = np.sqrt(max_length ** 2 + max_fbm ** 2 + max_tbm **2 + max_ctn **2 + max_ohm **2 + max_xohm **2 + max_ika **2)
-    n = len(net.line)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
+    max_integral_value = max(epsilon, max_integral_value)
 
-    return disparity_df,max_integral_value
+    return disparity_df, max_integral_value
+
 
 def normalize_categorical(data):
     """
     Normalizes categorical data to numeric values starting from 0.
+
+    Args:
+        data (pd.Series): Series containing categorical data.
+
+    Returns:
+        pd.Series: Series of normalized numeric values.
     """
-    unique_values = data.unique()
-    value_map = {value: idx for idx, value in enumerate(unique_values)}
-    return data.map(value_map)
+    # Input Validation
+    if not isinstance(data, pd.Series):
+        raise TypeError("Input must be a Pandas Series.")
+
+    if data.empty:
+        return pd.Series([], dtype='int')
+
+    # Clean Data: Convert to string, lower, strip whitespace, and fill NaN
+    data = data.astype(str).str.lower().str.strip().fillna("unknown")
+
+    # Using pd.Categorical for faster and more memory-efficient normalization
+    normalized = pd.Series(pd.Categorical(data).codes, index=data.index)
+
+    # Re-map any -1 (NaNs) to 0
+    normalized = normalized.replace(-1, 0)
+
+    return normalized
