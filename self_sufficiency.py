@@ -102,29 +102,27 @@ def selfsuff(net_temp, gen_factor, show_self_sufficiency_at_bus):
     selfsuff = float(erfolg) / (float(erfolg) + float(misserfolg))
     return float(selfsuff)
 
-def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
+def selfsufficiency_neu(grid, reduction_factor=0.95, verbose=True, min_threshold=0.01):
     """
     Testet, bis zu welchem Grad die Netzgrenzen reduziert werden können, bevor OPF nicht mehr konvergiert.
 
     Parameter:
-    - net_temp: pandapower Netz
+    - grid: pandapower Netz
     - reduction_factor: Pro Schritt Reduktion der Netzgrenzen (Standard: 95% der vorherigen Werte)
-    - min_threshold: Untere Grenze für die Reduktion (Standard: 95% der ursprünglichen Werte)
+    - verbose: Gibt aus, wie lange die OPF-Berechnung dauert (Standard: True)
 
     Gibt zurück:
-    - Liste mit (Reduktionswert, Zeit bis zur Konvergenz)
+    - Ein Wert: Maximaler Reduktionsfaktor, bei dem noch Konvergenz erreicht wird
     """
-    results = []
-
     # Originalwerte speichern
-    #net_temp = grid.copy
-    ext_grid = grid.ext_grid.copy
-    tempresults = 1
+    original_ext_grid = grid.ext_grid.copy()
+    current_reduction = 1.0  # Start bei 100%
 
     while True:
         try:
-            # Startzeit messen
-            start_time = time.time()
+            # Zeitmessung starten, falls verbose aktiviert ist
+            if verbose:
+                start_time = time.time()
 
             # OPF ausführen
             pp.runopp(
@@ -135,12 +133,10 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
                 distributed_slack=True
             )
 
-            # Dauer messen
-            duration = time.time() - start_time
-            print(f"OPF konvergiert in {duration:.4f} Sekunden.")
-
-            # Ergebnisse speichern
-            tempresults *= reduction_factor
+            # Zeitmessung beenden und ausgeben, falls verbose aktiviert ist
+            if verbose:
+                duration = time.time() - start_time
+                print(f"OPF konvergiert in {duration:.4f} Sekunden.")
 
             # Netzgrenzen weiter reduzieren
             grid.ext_grid.loc[:, 'max_p_mw'] *= reduction_factor
@@ -148,14 +144,20 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, min_threshold=0.5):
             grid.ext_grid.loc[:, 'min_p_mw'] *= reduction_factor
             grid.ext_grid.loc[:, 'min_q_mvar'] *= reduction_factor
 
+            # Reduktionsfaktor aktualisieren
+            current_reduction *= reduction_factor
+
+            # Überprüfen, ob min_threshold erreicht wurde
+            if (grid.ext_grid['max_p_mw'] < min_threshold * original_ext_grid['max_p_mw']).any():
+                print("Minimale Netzgrenzen erreicht.")
+                break
+
         except pp.optimal_powerflow.OPFNotConverged:
-            print("OPF konvergiert nichtmehr bei folgenden Werten!")
+            print("OPF konvergiert nicht mehr bei folgenden Werten!")
             break
 
-    results = 1 - tempresults
-    print(f"  max_p_mw: {grid.ext_grid.get('max_p_mw')} MW")
-    print(f"  min_p_mw: {grid.ext_grid.get('min_p_mw')} MW")
-    print(f"  max_q_mvar: {grid.ext_grid.get('max_q_mvar')} MVAR")
-    print(f"  min_q_mvar: {grid.ext_grid.get('min_q_mvar')} MVAR")
+    # Resultat berechnen
+    result_selfsuff_neu = 1 - current_reduction
+    print(f"System Self Sufficency: {result_selfsuff_neu}")
 
-    return results
+    return result_selfsuff_neu

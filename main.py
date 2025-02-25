@@ -23,66 +23,63 @@ from self_sufficiency import selfsufficiency_neu
 dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
 ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
-# Basic initialisation of different test grids via "Grid": "mv_all"; "mv_pv_wind"; "mv_no_renew"; "lv"; "new"; "mv_all_high5"; "mv_all_high10"
-#initialize test grids from CIGRE; either medium voltage including renewables or the low voltage grid
+# Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
+grids = {
+    "GBreducednetwork": pn.GBreducednetwork,
+    "case118": pn.case118,
+    "case14": pn.case14,
+    "case24_ieee_rts": pn.case24_ieee_rts,
+    "case30": pn.case30,
+    "case33bw": pn.case33bw,
+    "case39": pn.case39,
+    "case5": pn.case5,
+    "case6ww": pn.case6ww,
+    "case9": pn.case9,
+    "create_cigre_network_lv": pn.create_cigre_network_lv,
+    "create_cigre_network_mv": pn.create_cigre_network_mv,
+    "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    "create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
+    "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
+    "example_multivoltage": pn.example_multivoltage,
 
+    # Special Cases with Adjustments
+    "mv_all_high10": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=10),
+    "mv_all_high5": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=5)
+}
+
+# Function to increase generation and storage capacities
+def increase_generation(net, factor):
+    print(f"Verteilte Erzeugung und Speicher um den Faktor {factor} erhöht.")
+
+    # 1. Increase for gen (zentraler Generator)
+    for idx, gen in net.gen.iterrows():
+        net.gen.at[idx, 'p_mw'] *= factor
+        net.gen.at[idx, 'q_mvar'] *= factor
+
+    # 2. Increase for sgen (verteilte Erzeugung)
+    for idx, sgen in net.sgen.iterrows():
+        net.sgen.at[idx, 'p_mw'] *= factor
+        net.sgen.at[idx, 'q_mvar'] *= factor
+
+    # 3. Increase for storage (Speicher)
+    for idx, storage in net.storage.iterrows():
+        net.storage.at[idx, 'p_mw'] *= factor
+        net.storage.at[idx, 'q_mvar'] *= factor
+
+    return net
+
+# Configuration
 basic = {
-    "Grid": "mv_all_high10",
-    "Adjustements": True,
+    "Grid": "GBreducednetwork",  # Change this to select the grid
+    "Adjustments": True,
     "Overview_Grid": True
 }
 
-if basic["Grid"] == "mv_all_high10":
-    net = pn.create_cigre_network_mv('all')
-elif basic["Grid"] == "mv_all_high10":
-    net = pn.create_cigre_network_mv('all')
-    print("Verteilte Erzeugung und Speicher um den Faktor 10 erhöht.")
-
-    # 1. Erhöhung für gen (zentraler Generator)
-    for idx, gen in net.gen.iterrows():
-        net.gen.at[idx, 'p_mw'] *= 10
-        net.gen.at[idx, 'q_mvar'] *= 10
-
-    # 2. Erhöhung für sgen (verteilte Erzeugung)
-    for idx, sgen in net.sgen.iterrows():
-        net.sgen.at[idx, 'p_mw'] *= 10
-        net.sgen.at[idx, 'q_mvar'] *= 10
-
-    # 3. Erhöhung für storage (Speicher)
-    for idx, storage in net.storage.iterrows():
-        net.storage.at[idx, 'p_mw'] *= 10
-        net.storage.at[idx, 'q_mvar'] *= 10
-elif basic["Grid"] == "mv_all_high5":
-    net = pn.create_cigre_network_mv('all')
-    print("Verteilte Erzeugung und Speicher um den Faktor 5 erhöht.")
-
-    # 1. Erhöhung für gen (zentraler Generator)
-    for idx, gen in net.gen.iterrows():
-        net.gen.at[idx, 'p_mw'] *= 5
-        net.gen.at[idx, 'q_mvar'] *= 5
-
-    # 2. Erhöhung für sgen (verteilte Erzeugung)
-    for idx, sgen in net.sgen.iterrows():
-        net.sgen.at[idx, 'p_mw'] *= 5
-        net.sgen.at[idx, 'q_mvar'] *= 5
-
-    # 3. Erhöhung für storage (Speicher)
-    for idx, storage in net.storage.iterrows():
-        net.storage.at[idx, 'p_mw'] *= 5
-        net.storage.at[idx, 'q_mvar'] *= 5
-
-elif basic["Grid"] == "mv_pv_wind":
-    net = pn.create_cigre_network_mv('pv_wind')
-elif basic["Grid"] == "mv_no_renew":
-    net = pn.create_cigre_network_mv(False)
-elif basic["Grid"] == "cigre_lv":
-    net = pn.create_cigre_network_lv()
-elif basic["Grid"] == "kerber":
-    net = pn.create_kerber_dorfnetz()
-elif basic["Grid"] == "dickert":
-    net = pn.create_dickert_lv_network()
+# Select and create the grid dynamically
+if basic["Grid"] in grids:
+    net = grids[basic["Grid"]]()
 else:
-    raise ValueError(f"Unbekannter Grid-Typ: {basic['Grid']}")
+    raise ValueError(f"Unknown Grid Type: {basic['Grid']}")
 
 if basic["Overview_Grid"]:
     # Count elements and scaled elements
@@ -96,13 +93,13 @@ if basic["Overview_Grid"]:
         scaled_count = element_counts["scaled_counts"][element_type]
         print(f"{element_type.capitalize():<12} | {original_count:<14} | {scaled_count:<20}")
 
-if basic["Adjustements"]:
+if basic["Adjustments"]:
     net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
     net = set_missing_limits(net, required_p_mw, required_q_mvar)
 
 
 selected_indicators = {
-    "all": False,
+    "all": True,
     "self_sufficiency": True,
     "show_self_sufficiency_at_bus": False,
     "system_self_sufficiency": False,

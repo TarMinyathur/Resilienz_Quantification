@@ -18,7 +18,7 @@ def GraphenTheorieIndicator(Graph, dfinalresults):
     num_nodes = Graph.number_of_nodes()
     num_nodes = (num_nodes - 1) if num_nodes > 1 else 0
     norm_avg_pl = max(0, 1 - (avg_path_length / num_nodes))
-    print(f"Datatype of norm_avg_pl: {type(norm_avg_pl)}")
+    #print(f"Datatype of norm_avg_pl: {type(norm_avg_pl)}")
     print(f"Normalized Average Path Length: {norm_avg_pl}")
     dfinalresults = add_indicator(dfinalresults, 'Average Shortest Path Length', norm_avg_pl)
 
