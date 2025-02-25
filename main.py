@@ -102,7 +102,7 @@ if basic["Adjustements"]:
 
 
 selected_indicators = {
-    "all": True,
+    "all": False,
     "self_sufficiency": True,
     "show_self_sufficiency_at_bus": False,
     "system_self_sufficiency": False,
@@ -112,14 +112,14 @@ selected_indicators = {
     "line_variety": False,
     "load_shannon_evenness": False,
     "load_variety": False,
-    "disparity_generators": False,
-    "disparity_load": False,
-    "disparity_trafo": False,
-    "disparity_lines": False,
+    "disparity_generators": True,
+    "disparity_load": True,
+    "disparity_trafo": True,
+    "disparity_lines": True,
     "n_3_redundancy": True,
     "n_3_redundancy_print": True,
     "GraphenTheorie": False,
-    "show_spider_plot": True,
+    "show_spider_plot": False,
     "print_results": True,
     "output_excel": False
 }
@@ -170,24 +170,6 @@ if selected_indicators["load_shannon_evenness"]:
     dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
     if selected_indicators["load_variety"]:
         dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
-
-if selected_indicators["n_3_redundancy"]:
-    if not basic["Overview_Grid"]:
-        # Count elements and scaled elements
-        element_counts = count_elements(net)
-    n3_redundancy_results = n_3_redundancy_check(net, element_counts)
-    Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
-    Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
-    total_checks = Success + Failed
-    rate = Success / total_checks if total_checks != 0 else 0
-    for element_type, counts in n3_redundancy_results.items():
-        Success += counts['Success']
-        Failed += counts['Failed']
-        total_checks = Success + Failed
-        rate = Success / total_checks if total_checks != 0 else 0
-        if selected_indicators["n_3_redundancy_print"]:
-            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
-    dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
 if selected_indicators["GraphenTheorie"]:
     # Create an empty NetworkX graph
@@ -266,9 +248,27 @@ if selected_indicators["disparity_lines"]:
     ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
     dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
+if selected_indicators["n_3_redundancy"]:
+    if not basic["Overview_Grid"]:
+        # Count elements and scaled elements
+        element_counts = count_elements(net)
+    n3_redundancy_results = n_3_redundancy_check(net, element_counts)
+    Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
+    Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
+    total_checks = Success + Failed
+    rate = Success / total_checks if total_checks != 0 else 0
+    for element_type, counts in n3_redundancy_results.items():
+        Success += counts['Success']
+        Failed += counts['Failed']
+        total_checks = Success + Failed
+        rate = Success / total_checks if total_checks != 0 else 0
+        if selected_indicators["n_3_redundancy_print"]:
+            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
+    dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
+
 if selected_indicators["show_spider_plot"]:
     plot_spider_chart(dfinalresults)
-    if selected_indicators["print_results"]:
-        print(dfinalresults)
-        if selected_indicators["output_excel"]:
-            dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
+if selected_indicators["print_results"]:
+    print(dfinalresults)
+if selected_indicators["output_excel"]:
+    dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
