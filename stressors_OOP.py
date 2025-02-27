@@ -4,23 +4,25 @@ import numpy as np
 import numpy as np
 
 class Scenario:
-    def __init__(self, name, mode, target, reduction_rate, random_select=True):
+    def __init__(self, name, mode, targets, reduction_rate, random_select=True):
         self.name = name
         self.mode = mode
-        self.target = target
+        self.targets = targets
         self.reduction_rate = reduction_rate
         self.random_select = random_select
 
     def apply_modifications(self, net):
         """Passt das Netz basierend auf dem Szenario an."""
         if self.mode == "types":
+            print(self.targets)
             # Falls wir auf einen Typ (z. B. "PV") abzielen
-            net.sgen.loc[net.sgen["type"].isin(self.target), "p_mw"] *= self.reduction_rate
+            for target in self.targets: #falls mehrere targets angegeben werden
+                net.sgen.loc[net.sgen["type"] == target, "p_mw"] *= self.reduction_rate
 
         elif self.mode == "components":
             # Falls wir auf eine bestimmte Anzahl von Komponenten abzielen
-            if isinstance(self.target, str) and self.target in self.net:
-                df = net[self.target]  # Greife auf die Netzkomponente zu (z. B. net["trafo"])
+            if isinstance(self.targets, str) and self.targets in self.net:
+                df = net[self.targets]  # Greife auf die Netzkomponente zu (z. B. net["trafo"])
                 num_components = len(df)
 
                 if num_components > 0:
@@ -35,9 +37,9 @@ class Scenario:
 
 def scenarios(net, selected_scenarios):    # Szenarien definieren
     scenarios = [
-        Scenario("dunkelflaute", mode="types", target=["PV", "Wind"], reduction_rate=0.05),
-        Scenario("hagel", mode="types", target=["PV"], reduction_rate=0.5),
-        Scenario("sabotage", mode="components", target="trafo", reduction_rate=1.0, random_select=False),
+        Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.05),
+        Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
+        Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate=1.0, random_select=False),
     ]
 
     modified_nets = []  # Liste für modifizierte Netze
