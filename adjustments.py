@@ -174,6 +174,39 @@ def set_missing_limits(net, required_p_mw, required_q_mvar):
 
     return net
 
+def set_power_limits(df, multiplier=1.4):
+    """
+    Vectorized function to set power limits for gen, sgen, and storage.
+    """
+
+    # Ensure required columns exist, initializing with NaN if missing
+    for col in ['max_p_mw', 'min_p_mw', 'max_q_mvar', 'min_q_mvar']:
+        if col not in df.columns:
+            df[col] = pd.NA  # Initialize with NaN
+
+    # Set Active Power Limits (P)
+    df['max_p_mw'] = df['max_p_mw'].fillna(df['p_mw'] * multiplier)
+    df['min_p_mw'] = df['min_p_mw'].fillna(0)
+
+    # Set Reactive Power Limits (Q)
+    df['max_q_mvar'] = df['max_q_mvar'].fillna(df['p_mw'])
+    df['min_q_mvar'] = df['min_q_mvar'].fillna(-df['p_mw'])
+
+def initialize_and_set_bus_voltage_limits(net, min_vm_pu=0.8, max_vm_pu=1.2):
+    """
+    Ensures 'min_vm_pu' and 'max_vm_pu' columns exist and sets default voltage limits.
+    This avoids KeyError and handles future Pandas changes gracefully.
+    """
+    # Check and initialize if columns don't exist
+    if 'min_vm_pu' not in net.bus.columns:
+        net.bus['min_vm_pu'] = pd.NA
+    if 'max_vm_pu' not in net.bus.columns:
+        net.bus['max_vm_pu'] = pd.NA
+
+    # Safely fill NaN values with defaults
+    net.bus['min_vm_pu'] = net.bus['min_vm_pu'].fillna(min_vm_pu).astype(float)
+    net.bus['max_vm_pu'] = net.bus['max_vm_pu'].fillna(max_vm_pu).astype(float)
+
 def determine_minimum_ext_grid_power(net):
     """
     Runs OPF to determine the required minimum external grid power (max_p_mw).
@@ -181,38 +214,18 @@ def determine_minimum_ext_grid_power(net):
     """
 
     # Define Constants
-    DEFAULT_MAX_P_MW = 1000000
-    DEFAULT_MIN_P_MW = -200000
-    DEFAULT_MAX_Q_MVAR = 1000000
-    DEFAULT_MIN_Q_MVAR = -200000
-    MIN_VM_PU, MAX_VM_PU = 0.8, 1.2
+    DEFAULT_MAX_P_MW = 10000000
+    DEFAULT_MIN_P_MW = -2000000
+    DEFAULT_MAX_Q_MVAR = 10000000
+    DEFAULT_MIN_Q_MVAR = -2000000
 
-    def set_power_limits(df, idx, p_mw):
-        """ Helper function to set power limits for gen, sgen, and storage """
-        if pd.isna(df.loc[idx, 'max_p_mw']):
-            df.loc[idx, 'max_p_mw'] = 1.2 * p_mw
-        if pd.isna(df.loc[idx, 'min_p_mw']):
-            df.loc[idx, 'min_p_mw'] = 0
-        if pd.isna(df.loc[idx, 'max_q_mvar']):
-            df.loc[idx, 'max_q_mvar'] = p_mw
-        if pd.isna(df.loc[idx, 'min_q_mvar']):
-            df.loc[idx, 'min_q_mvar'] = -p_mw
-
-    # Process conventional generators (gen)
-    for idx, gen in net.gen.iterrows():
-        set_power_limits(net.gen, idx, gen['p_mw'])
-
-    # Process static generators (sgen) - e.g., PV & Wind
-    for idx, sgen in net.sgen.iterrows():
-        set_power_limits(net.sgen, idx, sgen['p_mw'])
-
-    # Process storage units (storage)
-    for idx, storage in net.storage.iterrows():
-        set_power_limits(net.storage, idx, storage['p_mw'])
+    # Apply the power limits to each component using vectorized operations
+    set_power_limits(net.gen)
+    set_power_limits(net.sgen)
+    set_power_limits(net.storage)
 
     # Set bus voltage limits
-    net.bus['min_vm_pu'] = net.bus['min_vm_pu'].fillna(MIN_VM_PU)
-    net.bus['max_vm_pu'] = net.bus['max_vm_pu'].fillna(MAX_VM_PU)
+    initialize_and_set_bus_voltage_limits(net)
 
     # External Grid Settings
     for idx, ext_grid in net.ext_grid.iterrows():
