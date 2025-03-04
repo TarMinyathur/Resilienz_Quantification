@@ -6,6 +6,7 @@ import networkx as nx
 #import numpy as np
 import pandas as pd
 #import matplotlib.pyplot as plt
+import time
 from count_elements import count_elements
 from diversity import calculate_shannon_evenness_and_variety
 from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, calculate_load_disparity
@@ -37,7 +38,6 @@ grids = {
     "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
     "create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
-#    "example_multivoltage": pn.example_multivoltage,
 
     # Special Cases with Adjustments
     "mv_all_high10": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=10),
@@ -67,28 +67,28 @@ def increase_generation(net, factor):
 
 # Configuration
 basic = {
-    "Grid": "mv_all_high5",  # Change this to select the grid
+    "Grid": "create_cigre_network_mv_pv_wind",  # Change this to select the grid
     "Adjustments": True,
-    "Overview_Grid": True
+    "Overview_Grid": False
 }
 
 selected_indicators = {
     "all": False,
     "self_sufficiency": True,
-    "show_self_sufficiency_at_bus": False,
+    "show_self_sufficiency_at_bus": True,
     "system_self_sufficiency": True,
-    "generation_shannon_evenness": False,
-    "generation_variety": False,
-    "line_shannon_evenness": False,
-    "line_variety": False,
+    "generation_shannon_evenness": True,
+    "generation_variety": True,
+    "line_shannon_evenness": True,
+    "line_variety": True,
     "load_shannon_evenness": True,
-    "load_variety": False,
-    "disparity_generators": False,
-    "disparity_load": False,
-    "disparity_trafo": False,
-    "disparity_lines": False,
+    "load_variety": True,
+    "disparity_generators": True,
+    "disparity_load": True,
+    "disparity_trafo": True,
+    "disparity_lines": True,
     "n_3_redundancy": True,
-    "n_3_redundancy_print": True,
+    "n_3_redundancy_print": False,
     "GraphenTheorie": False,
     "show_spider_plot": False,
     "print_results": True,
@@ -157,7 +157,7 @@ def main():
             # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
             'line': 2,  # "ol" (overhead line) and "cs" (cable system)
             'load': 10
-            # Example: 4 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
+            # Example: 10 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
         }
 
     if selected_indicators["generation_shannon_evenness"]:
@@ -227,8 +227,6 @@ def main():
 
         # Compute the integral (sum) over the entire DataFrame
         integral_value_gen = disparity_df_gen.values.sum()
-        #print(f"Disparity Integral Generators: {integral_value_gen}")
-        #print(f"Disparity Integral max Loads: {max_integral_gen}")
 
         ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Generators',
@@ -257,43 +255,83 @@ def main():
         ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
-    if selected_indicators["n_3_redundancy"]:
-        if not basic["Overview_Grid"]:
-            # Count elements and scaled elements
-            element_counts = count_elements(net)
-        n3_redundancy_results = n_3_redundancy_check(net, element_counts)
-        Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
-        Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
-        total_checks = Success + Failed
-        rate = Success / total_checks if total_checks != 0 else 0
-        for element_type, counts in n3_redundancy_results.items():
-            Success += counts['Success']
-            Failed += counts['Failed']
-            total_checks = Success + Failed
-            rate = Success / total_checks if total_checks != 0 else 0
-            if selected_indicators["n_3_redundancy_print"]:
-                print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
-        dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
-
-
+    # if selected_indicators["n_3_redundancy"]:
+    #     if not basic["Overview_Grid"]:
+    #         element_counts = count_elements(net)
+    #     start_time = time.time()
+    #     n3_redundancy_results = n_3_redundancy_check(net, element_counts, start_time)
+    #
+    #     # Correctly compute Success and Failed only once
+    #     Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
+    #     Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
+    #     total_checks = Success + Failed
+    #     rate = Success / total_checks if total_checks != 0 else 0
+    #
+    #     # Print without altering the Success/Failed values
+    #     for element_type, counts in n3_redundancy_results.items():
+    #         if selected_indicators["n_3_redundancy_print"]:
+    #             print(
+    #                 f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
+    #
+    #     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
+    #
     # if selected_indicators["n_3_redundancy"]:
     #     if not basic["Overview_Grid"]:
     #         # Count elements and scaled elements
-    #          element_counts = count_elements(net)
-    #     n3_redundancy_results = n_3_redundancy_check(net, element_counts)
+    #         element_counts = count_elements(net)
+    #     start_time = time.time()
+    #     n3_redundancy_results = n_3_redundancy_check(net, element_counts, start_time)
     #     Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
     #     Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
     #     total_checks = Success + Failed
     #     rate = Success / total_checks if total_checks != 0 else 0
     #     for element_type, counts in n3_redundancy_results.items():
-    #         # Success += counts['Success']
-    #         # Failed += counts['Failed']
-    #         # total_checks = Success + Failed
-    #         # rate = Success / total_checks if total_checks != 0 else 0
+    #         Success += counts['Success']
+    #         Failed += counts['Failed']
+    #         total_checks = Success + Failed
+    #         rate = Success / total_checks if total_checks != 0 else 0
     #         if selected_indicators["n_3_redundancy_print"]:
     #             print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     #     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
+    if selected_indicators["n_3_redundancy"]:
+        if not basic["Overview_Grid"]:
+            # Count elements and scaled elements
+            element_counts = count_elements(net)
+
+        # Liste der zu prüfenden Elementtypen
+        element_types = ["sgen", "gen", "line", "trafo", "bus", "storage"]
+
+        n3_redundancy_results = {}
+        Success = 0
+        Failed = 0
+        timeout = 300
+
+        # Über alle relevanten Elementtypen iterieren
+        for element_type in element_types:
+            start_time = time.time()
+            results = n_3_redundancy_check(net, element_counts, start_time, element_type, timeout)
+            n3_redundancy_results[element_type] = results[element_type]
+
+            # Summiere die Ergebnisse
+            Success += results[element_type]['Success']
+            Failed += results[element_type]['Failed']
+
+            # Optional: Ergebnis für jeden Typ ausgeben
+            if selected_indicators["n_3_redundancy_print"]:
+                print(
+                    f"{element_type.capitalize()} - Success count: {results[element_type]['Success']}, Failed count: {results[element_type]['Failed']}")
+
+        # Gesamtrate berechnen
+        total_checks = Success + Failed
+        rate = Success / total_checks if total_checks != 0 else 0
+
+        # Ergebnis in DataFrame speichern
+        dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
+
+    if selected_indicators["n_3_redundancy_print"]:
+        for element_type, counts in n3_redundancy_results.items():
+            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     if selected_indicators["show_spider_plot"]:
         plot_spider_chart(dfinalresults)
     if selected_indicators["print_results"]:

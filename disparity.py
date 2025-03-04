@@ -77,6 +77,18 @@ def calculate_disparity_space(net, generation_factors):
     # Select relevant columns
     total_sums = total_sums[['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']]
 
+    # --- Incorporate Geodata ---
+    # If generation units do not have geodata, merge bus geodata into total_sums.
+    # Assumes net.bus has columns 'bus', 'x', and 'y'
+    if not net.bus.empty and {'bus', 'x', 'y'}.issubset(net.bus.columns):
+        total_sums = pd.merge(total_sums, net.bus[['bus', 'x', 'y']], on='bus', how='left')
+        total_sums['x'] = total_sums['x'].fillna(0)
+        total_sums['y'] = total_sums['y'].fillna(0)
+    else:
+        # If no bus geodata available, assign 0 coordinates.
+        total_sums['x'] = 0
+        total_sums['y'] = 0
+
     # Vectorized Disparity Matrix Calculation
     n = len(total_sums)
     p_diff = total_sums['p_mw'].values[:, None] - total_sums['p_mw'].values
@@ -84,8 +96,12 @@ def calculate_disparity_space(net, generation_factors):
     sn_diff = total_sums['sn_mva'].values[:, None] - total_sums['sn_mva'].values
     eff_sn_diff = total_sums['effective_sn_mva'].values[:, None] - total_sums['effective_sn_mva'].values
 
-    # Vectorized calculation of Euclidean distance
-    disparity_matrix = np.sqrt(p_diff**2 + q_diff**2 + sn_diff**2 + eff_sn_diff**2)
+    # Differences for geodata (bus coordinates)
+    x_diff = total_sums['x'].values[:, None] - total_sums['x'].values
+    y_diff = total_sums['y'].values[:, None] - total_sums['y'].values
+
+    # Euclidean distance considering both generation and spatial factors
+    disparity_matrix = np.sqrt( p_diff**2 + q_diff**2 + sn_diff**2 + eff_sn_diff**2 + x_diff**2 + y_diff**2 )
     np.fill_diagonal(disparity_matrix, 0)  # Set diagonal to zero
 
     # Convert to DataFrame for easier handling
@@ -96,7 +112,10 @@ def calculate_disparity_space(net, generation_factors):
     max_q = total_sums['q_mvar'].max()
     max_sn = total_sums['sn_mva'].max()
     max_eff = total_sums['effective_sn_mva'].max()
-    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_eff ** 2 + max_sn ** 2)
+    max_x = total_sums['x'].max()
+    max_y = total_sums['y'].max()
+
+    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_sn ** 2 + max_eff ** 2 + max_x ** 2 + max_y ** 2)
 
     # Use a small epsilon instead of max(1, value)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
@@ -150,14 +169,28 @@ def calculate_load_disparity(net):
     # Prepare data for disparity calculation
     load_data = net.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
 
+    # --- Incorporate Geodata ---
+    # If load-specific geodata is available, you could use it.
+    # Otherwise, merge bus geodata into load_data. We assume net.bus has 'bus', 'x', and 'y' columns.
+    if not net.bus.empty and {'bus', 'x', 'y'}.issubset(net.bus.columns):
+        load_data = pd.merge(load_data, net.bus[['bus', 'x', 'y']], on='bus', how='left')
+        load_data['x'] = load_data['x'].fillna(0)
+        load_data['y'] = load_data['y'].fillna(0)
+    else:
+        load_data['x'] = 0
+        load_data['y'] = 0
+
     # Vectorized Disparity Matrix Calculation
     n = len(load_data)
     p_diff = load_data['p_mw'].values[:, None] - load_data['p_mw'].values
     q_diff = load_data['q_mvar'].values[:, None] - load_data['q_mvar'].values
     sn_diff = load_data['sn_mva'].values[:, None] - load_data['sn_mva'].values
+    # Differences for geodata (bus coordinates)
+    x_diff = load_data['x'].values[:, None] - load_data['x'].values
+    y_diff = load_data['y'].values[:, None] - load_data['y'].values
 
     # Vectorized calculation of Euclidean distance
-    disparity_matrix = np.sqrt(p_diff**2 + q_diff**2 + sn_diff**2)
+    disparity_matrix = np.sqrt(p_diff**2 + q_diff**2 + sn_diff**2 + x_diff**2 + y_diff**2)
     np.fill_diagonal(disparity_matrix, 0)  # Set diagonal to zero
 
     # Convert to DataFrame for easier handling
@@ -167,7 +200,9 @@ def calculate_load_disparity(net):
     max_p = load_data['p_mw'].max()
     max_q = load_data['q_mvar'].max()
     max_sn = load_data['sn_mva'].max()
-    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_sn ** 2)
+    max_x = load_data['x'].max()
+    max_y = load_data['y'].max()
+    max_disparity = np.sqrt(max_p ** 2 + max_q ** 2 + max_sn ** 2 + max_x ** 2 + max_y ** 2)
 
     # Use a small epsilon instead of max(1, value)
     max_integral_value = (n * (n - 1) / 2) * max_disparity
@@ -199,8 +234,39 @@ def calculate_transformer_disparity(net, debug=False):
     for column in required_columns:
         net.trafo[column] = pd.to_numeric(net.trafo[column], errors='coerce').fillna(0)
 
-    # Combine the metrics into a single dataframe
-    trafo_data = net.trafo[required_columns].copy()
+    # *** Incorporate Bus Geodata ***
+    # Assuming net.bus should contain columns: 'bus_id', 'x', 'y'
+    # And net.trafo should have a column 'hv_bus' that corresponds to bus IDs.
+
+    # Check for 'hv_bus' in net.trafo. If missing, set a default value.
+    if 'hv_bus' not in net.trafo.columns:
+        print("Warning: 'hv_bus' column missing in net.trafo. Defaulting to 0 for all entries.")
+        net.trafo['hv_bus'] = 0
+
+    # Check if net.bus contains the required geodata columns
+    if not {'bus_id', 'x', 'y'}.issubset(net.bus.columns):
+        print("Warning: net.bus does not contain 'bus_id', 'x', and 'y' columns. Setting geodata to 0 for all buses.")
+        # Create an empty DataFrame or a default mapping where every bus gets geodata of 0
+        # If bus_id exists in net.bus, use it; otherwise, assume an empty mapping.
+        if 'bus_id' in net.bus.columns:
+            bus_ids = net.bus['bus_id']
+            bus_geo = pd.DataFrame({'x': 0, 'y': 0}, index=bus_ids)
+        else:
+            bus_geo = pd.DataFrame({'x': [], 'y': []})
+    else:
+        bus_geo = net.bus.set_index('bus_id')[['x', 'y']]
+
+    # Map transformer high-voltage bus IDs to their coordinates
+    # Use .get to handle missing bus entries safely (default to 0)
+    net.trafo['geo_x'] = net.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'x'] if b in bus_geo.index else 0)
+    net.trafo['geo_y'] = net.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'y'] if b in bus_geo.index else 0)
+
+    if debug:
+        print("\nDebug: Transformer Data After Cleaning and Adding Bus Geodata")
+        print(net.trafo[[*required_columns, 'hv_bus', 'geo_x', 'geo_y']].head())
+
+    # Combine numerical and geographic features
+    trafo_data = net.trafo[required_columns + ['geo_x', 'geo_y']].copy()
 
     if debug:
         print("\nDebug: Transformer Data After Cleaning")
@@ -223,6 +289,9 @@ def calculate_transformer_disparity(net, debug=False):
     max_integral_value = (n * (n - 1) / 2) * max_disparity
     max_integral_value = max(epsilon, max_integral_value)
 
+    # Clean up: remove added geodata columns from net.trafo to preserve original structure
+    net.trafo.drop(columns=['geo_x', 'geo_y'], inplace=True, errors='ignore')
+
     return disparity_df, max_integral_value
 
 def calculate_line_disparity(net, debug=False):
@@ -239,13 +308,23 @@ def calculate_line_disparity(net, debug=False):
     net.line['to_bus_norm'] = normalize_categorical(net.line['to_bus'])
     net.line['cable_type_norm'] = normalize_categorical(net.line['type'])
 
+    # Process line_geodata if available
+    if hasattr(net, 'line_geodata') and not net.line_geodata.empty:
+        # Extract centroid (average of coordinates)
+        net.line['geo_x'] = net.line_geodata['coords'].apply(lambda coords: np.mean([p[0] for p in coords]) if coords else 0)
+        net.line['geo_y'] = net.line_geodata['coords'].apply(lambda coords: np.mean([p[1] for p in coords]) if coords else 0)
+    else:
+        # Fallback: Assign 0 if no geodata available
+        net.line['geo_x'] = 0
+        net.line['geo_y'] = 0
+
     if debug:
         print("\nDebug: Line Data After Normalization")
         print(net.line)
 
     # Combine the metrics into a single dataframe
     line_data = net.line[['length_km', 'from_bus_norm', 'to_bus_norm',
-                          'cable_type_norm', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']].copy()
+                          'cable_type_norm', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka', 'geo_x', 'geo_y']].copy()
 
     # Vectorized Disparity Matrix Calculation
     n = len(line_data)
@@ -275,7 +354,7 @@ def calculate_line_disparity(net, debug=False):
     max_integral_value = (n * (n - 1) / 2) * max_disparity
 
     # **Remove normalized columns after calculation**
-    columns_to_drop = ['from_bus_norm', 'to_bus_norm', 'cable_type_norm']
+    columns_to_drop = ['from_bus_norm', 'to_bus_norm', 'cable_type_norm', 'geo_x', 'geo_y']
     net.line.drop(columns=columns_to_drop, inplace=True, errors='ignore')
 
     return disparity_df, max_integral_value
