@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 
-
 import itertools
-import time
 import pandapower as pp
-import pandapower.networks as pn
 import networkx as nx
 from concurrent.futures import ThreadPoolExecutor
-from adjustments import set_missing_limits
-from adjustments import determine_minimum_ext_grid_power
 
 # Schwellenwerte definieren
 CRITICAL_THRESHOLD = 90  # in Prozent, z. B. für Leitungen und Transformatoren
@@ -22,6 +17,155 @@ Die Indikatoren werden so definiert, dass 1 das bestmögliche Ergebnis darstellt
 Lastfluss und Redundanz werden dabei gleich gewichtet; im Lastfluss fließen sowohl die durchschnittliche Auslastung 
 als auch der Anteil kritischer Elemente ein.
 """
+
+def Redundancy(net):
+    # # Beispielnetz erstellen (IEEE 9-Bus-System)
+    # net = pn.create_cigre_network_mv("all")
+    # net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
+    # net = set_missing_limits(net, required_p_mw, required_q_mvar)
+
+    # Lastflussberechnung durchführen
+    pp.runpp(net)
+
+    print("\nLastflussanalyse:")
+
+    # Ergebnisse in lf_resultsb speichern:
+    lf_resultsb = {}
+    # Auswertung der Auslastungen:
+    lf_resultsb["line"] = analyze_loading(net.res_line[['loading_percent']], "Leitungen")
+    lf_resultsb["trafo"] = analyze_loading(net.res_trafo[['loading_percent']], "Transformatoren")
+
+    # Busspannungsauswertung:
+    lf_resultsb["bus"] = analyze_buses(net.res_bus[['vm_pu']])
+
+    # Erzeugeranalyse (Generator-Pmax aus net.gen):
+    lf_resultsb["gen"] = analyze_generators(net.res_gen[['p_mw']], net.gen[['max_p_mw']])
+
+    # Ordentliche, formatierte Ausgabe:
+    print("Ergebnisse der Lastflussanalyse:\n" + "-" * 40)
+    for comp, resultsb in lf_resultsb.items():
+        print(f"{comp}:")
+        for key, value in resultsb.items():
+            print(f"  {key}: {value}")
+        print("-" * 40)
+
+    element_counts = {
+        "scaled_counts": {
+            "line": len(net.line),
+            "sgen": len(net.sgen),
+            "trafo": len(net.trafo),
+            "bus": len(net.bus),
+            "storage": len(net.storage)
+        }
+    }
+
+    print("\nStarte N-2-Redundanzprüfung...")
+    red_resultsb = n_2_redundancy_check(net)
+
+    # # Ergebnisse ausgeben
+    # print("\nErgebnisse der N-2-Redundanzprüfung:")
+    # for element, stats in red_resultsb.items():
+    #     print(f"{element.capitalize()}: Erfolg: {stats['Success']}, Fehlgeschlagen: {stats['Failed']}")
+
+        # Berechnung der Komponentenindikatoren:
+    component_indicators = {}
+
+    # Leitungen:
+    lf_line = compute_lf_indicator(
+        avg_loading=lf_resultsb["line"]["avg_loading"],
+        num_crit=lf_resultsb["line"]["num_crit"],
+        total=lf_resultsb["line"]["total"]
+    )
+    red_line = compute_red_indicator(
+        Success=red_resultsb["line"]["Success"],
+        Fail=red_resultsb["line"]["Failed"]
+    )
+    component_indicators["line"] = {
+        "lf": lf_line,
+        "red": red_line,
+        "combined": combine_indicators(lf_line, red_line)
+    }
+
+    # Transformatoren:
+    lf_trafo = compute_lf_indicator(
+        avg_loading=lf_resultsb["trafo"]["avg_loading"],
+        num_crit=lf_resultsb["trafo"]["num_crit"],
+        total=lf_resultsb["trafo"]["total"]
+    )
+    red_trafo = compute_red_indicator(
+        Success=red_resultsb["trafo"]["Success"],
+        Fail=red_resultsb["trafo"]["Failed"]
+    )
+    component_indicators["trafo"] = {
+        "lf": lf_trafo,
+        "red": red_trafo,
+        "combined": combine_indicators(lf_trafo, red_trafo)
+    }
+
+    # Busse:
+    lf_bus = compute_bus_lf_indicator(
+        avg_voltage=lf_resultsb["bus"]["avg_voltage"],
+        under=lf_resultsb["bus"]["under"],
+        over=lf_resultsb["bus"]["over"],
+        total=lf_resultsb["bus"]["total"]
+    )
+    red_bus = compute_red_indicator(
+        Success=red_resultsb["bus"]["Success"],
+        Fail=red_resultsb["bus"]["Failed"]
+    )
+    component_indicators["bus"] = {
+        "lf": lf_bus,
+        "red": red_bus,
+        "combined": combine_indicators(lf_bus, red_bus)
+    }
+
+    # sgen und storage besitzen in unserem Beispiel keine Lastflussdaten.
+    # Daher verwenden wir für den Lastflussindikator hier default-mäßig 1 (optimal),
+    # sodass der kombinierte Indikator allein von der Redundanz abhängt.
+    for comp in ["sgen", "storage"]:
+        red_comp = compute_red_indicator(
+            Success=red_resultsb[comp]["Success"],
+            Fail=red_resultsb[comp]["Failed"]
+        )
+        component_indicators[comp] = {
+            "lf": 1.0,
+            "red": red_comp,
+            "combined": combine_indicators(1.0, red_comp)
+        }
+
+    # # Ausgabe der Indikatoren pro Komponente:
+    # print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
+    # for comp, inds in component_indicators.items():
+    #     print(f"{comp.capitalize()}:")
+    #     print(f"  Lastfluss: {inds['lf']:.3f}")
+    #     print(f"  Redundanz: {inds['red']:.3f}")
+    #     print(f"  Kombiniert: {inds['combined']:.3f}")
+
+    # Berechnung der Gesamtindikatoren
+    # Wir berechnen hier den Durchschnitt der Lastflussindikatoren und der Redundanzindikatoren
+    lf_total = 0
+    red_total = 0
+    count_lf = 0
+    count_red = 0
+    for comp, inds in component_indicators.items():
+        # Falls LF-Daten vorhanden sind:
+        if inds["lf"] is not None:
+            lf_total += inds["lf"]
+            count_lf += 1
+        if inds["red"] is not None:
+            red_total += inds["red"]
+            count_red += 1
+
+    overall_lf = lf_total / count_lf if count_lf > 0 else 1
+    overall_red = red_total / count_red if count_red > 0 else 1
+    overall_combined = (overall_lf + overall_red) / 2
+
+    # print("\nGesamtindikatoren:")
+    # print(f"  Lastfluss Gesamt: {overall_lf:.3f}")
+    # print(f"  N-2 Redundanz Gesamt: {overall_red:.3f}")
+    # print(f"  Kombinierter Gesamtindikator: {overall_combined:.3f}")
+
+    return overall_lf, overall_red, overall_combined, component_indicators, red_resultsb
 
 
 def compute_lf_indicator(avg_loading, num_crit, total):
@@ -65,10 +209,10 @@ def compute_red_indicator(Success, Fail):
     Berechnet den Redundanzindikator aus den Ergebnissen der N-2-Prüfung.
     Der Indikator entspricht der Erfolgsquote:
         Success / (Success + Fail)
-    Falls keine Prüfungen durchgeführt wurden, wird als optimal (1) angenommen.
+    Falls keine Prüfungen durchgeführt wurden, wird als 0 angenommen.
     """
     total = Success + Fail
-    return Success / total if total > 0 else 1
+    return Success / total if total > 0 else 0
 
 
 def combine_indicators(lf_ind, red_ind):
@@ -158,9 +302,9 @@ def analyze_generators(gen_data, gen_max):
 Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.
 """
 
-def n_2_redundancy_check(net_temp, element_counts, timeout=900):
+def n_2_redundancy_check(net_temp):
     """Überprüft die N-2-Redundanz für verschiedene Netzkomponenten."""
-    results = {
+    resultsa = {
         "line": {"Success": 0, "Failed": 0},
         "sgen": {"Success": 0, "Failed": 0},
         "trafo": {"Success": 0, "Failed": 0},
@@ -170,39 +314,30 @@ def n_2_redundancy_check(net_temp, element_counts, timeout=900):
 
     # Erstelle Kombinationen von zwei Elementen pro Kategorie (N-2-Prüfung)
     element_pairs = {
-        "line": list(itertools.combinations(net_temp.line.index, min(2, element_counts["scaled_counts"]["line"]))) if not net_temp.line.empty else [],
-        "sgen": list(itertools.combinations(net_temp.sgen.index, min(2, element_counts["scaled_counts"]["sgen"]))) if not net_temp.sgen.empty else [],
-        "trafo": list(itertools.combinations(net_temp.trafo.index, min(2, element_counts["scaled_counts"]["trafo"]))) if not net_temp.trafo.empty else [],
-        "bus": list(itertools.combinations(net_temp.bus.index, min(2, element_counts["scaled_counts"]["bus"]))) if not net_temp.bus.empty else [],
-        "storage": list(itertools.combinations(net_temp.storage.index, min(2, element_counts["scaled_counts"]["storage"]))) if not net_temp.storage.empty else []
+        "line": list(itertools.combinations(net_temp.line.index, 2)) if not net_temp.line.empty else [],
+        "sgen": list(itertools.combinations(net_temp.sgen.index, 2)) if not net_temp.sgen.empty else [],
+        "trafo": list(itertools.combinations(net_temp.trafo.index, 2)) if not net_temp.trafo.empty else [],
+        "bus": list(itertools.combinations(net_temp.bus.index, 2)) if not net_temp.bus.empty else [],
+        "storage": list(itertools.combinations(net_temp.storage.index, 2)) if not net_temp.storage.empty else []
     }
 
-    start_time = time.time()
-    should_stop = False
+    print(element_pairs)
 
     # Parallelisierung der Netzberechnungen
     with ThreadPoolExecutor() as executor:
         futures = []
 
         for element_type, pairs in element_pairs.items():
-            if should_stop:
-                break
 
             for pair in pairs:
                 net_copy = net_temp.deepcopy()
                 futures.append(executor.submit(process_pair, element_type, pair, net_copy))
 
-                # Timeout-Überprüfung
-                if (time.time() - start_time) > timeout:
-                    print("Timeout erreicht. Beende den Prozess.")
-                    should_stop = True
-                    break
-
         for future in futures:
             element_type, status = future.result()
-            results[element_type][status] += 1
+            resultsa[element_type][status] += 1
 
-    return results
+    return resultsa
 
 
 def process_pair(element_type, pair, net_temp):
@@ -228,7 +363,7 @@ def process_pair(element_type, pair, net_temp):
         return element_type, "Success"
 
     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-        print(f"OPF mit init='pf' für {element_type} fehlgeschlagen, versuche init='flat'")
+        #print(f"OPF mit init='pf' für {element_type} fehlgeschlagen, versuche init='flat'")
         try:
             pp.runopp(
                 net_temp,
@@ -239,13 +374,13 @@ def process_pair(element_type, pair, net_temp):
             )
             return element_type, "Success"
         except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-            print(f"OPF mit init='flat' für {element_type} fehlgeschlagen")
+            #print(f"OPF mit init='flat' für {element_type} fehlgeschlagen")
             return element_type, "Failed"
         except Exception as e:
-            print(f"Fehler bei {element_type} mit Paar {pair}: {e}")
+            #print(f"Fehler bei {element_type} mit Paar {pair}: {e}")
             return element_type, "Failed"
     except Exception as e:
-        print(f"Fehler bei {element_type} mit Paar {pair}: {e}")
+        #print(f"Fehler bei {element_type} mit Paar {pair}: {e}")
         return element_type, "Failed"
 
 
@@ -281,154 +416,3 @@ def is_graph_connected(net_temp, out_of_service_elements):
 
     # Prüfe, ob das Netz verbunden ist
     return nx.is_connected(G)
-
-
-def main():
-    # Beispielnetz erstellen (IEEE 9-Bus-System)
-    net = pn.create_cigre_network_mv("all")
-    net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-    net = set_missing_limits(net, required_p_mw, required_q_mvar)
-
-    # Lastflussberechnung durchführen
-    pp.runpp(net)
-
-    print("\nLastflussanalyse:")
-
-    # Ergebnisse in lf_results speichern:
-    lf_results = {}
-    # Auswertung der Auslastungen:
-    lf_results["line"] = analyze_loading(net.res_line[['loading_percent']], "Leitungen")
-    lf_results["trafo"] = analyze_loading(net.res_trafo[['loading_percent']], "Transformatoren")
-
-    # Busspannungsauswertung:
-    lf_results["bus"] = analyze_buses(net.res_bus[['vm_pu']])
-
-    # Erzeugeranalyse (Generator-Pmax aus net.gen):
-    lf_results["gen"] = analyze_generators(net.res_gen[['p_mw']], net.gen[['max_p_mw']])
-
-    # Ordentliche, formatierte Ausgabe:
-    print("Ergebnisse der Lastflussanalyse:\n" + "-" * 40)
-    for comp, results in lf_results.items():
-        print(f"{comp}:")
-        for key, value in results.items():
-            print(f"  {key}: {value}")
-        print("-" * 40)
-
-    element_counts = {
-        "scaled_counts": {
-            "line": len(net.line),
-            "sgen": len(net.sgen),
-            "trafo": len(net.trafo),
-            "bus": len(net.bus),
-            "storage": len(net.storage)
-        }
-    }
-
-    print("\nStarte N-2-Redundanzprüfung...")
-    red_results = n_2_redundancy_check(net, element_counts)
-
-    # Ergebnisse ausgeben
-    print("\nErgebnisse der N-2-Redundanzprüfung:")
-    for element, stats in red_results.items():
-        print(f"{element.capitalize()}: Erfolg: {stats['Success']}, Fehlgeschlagen: {stats['Failed']}")
-
-        # Berechnung der Komponentenindikatoren:
-    component_indicators = {}
-
-    # Leitungen:
-    lf_line = compute_lf_indicator(
-        avg_loading=lf_results["line"]["avg_loading"],
-        num_crit=lf_results["line"]["num_crit"],
-        total=lf_results["line"]["total"]
-    )
-    red_line = compute_red_indicator(
-        Success=red_results["line"]["Success"],
-        Fail=red_results["line"]["Failed"]
-    )
-    component_indicators["line"] = {
-        "lf": lf_line,
-        "red": red_line,
-        "combined": combine_indicators(lf_line, red_line)
-    }
-
-    # Transformatoren:
-    lf_trafo = compute_lf_indicator(
-        avg_loading=lf_results["trafo"]["avg_loading"],
-        num_crit=lf_results["trafo"]["num_crit"],
-        total=lf_results["trafo"]["total"]
-    )
-    red_trafo = compute_red_indicator(
-        Success=red_results["trafo"]["Success"],
-        Fail=red_results["trafo"]["Failed"]
-    )
-    component_indicators["trafo"] = {
-        "lf": lf_trafo,
-        "red": red_trafo,
-        "combined": combine_indicators(lf_trafo, red_trafo)
-    }
-
-    # Busse:
-    lf_bus = compute_bus_lf_indicator(
-        avg_voltage=lf_results["bus"]["avg_voltage"],
-        under=lf_results["bus"]["under"],
-        over=lf_results["bus"]["over"],
-        total=lf_results["bus"]["total"]
-    )
-    red_bus = compute_red_indicator(
-        Success=red_results["bus"]["Success"],
-        Fail=red_results["bus"]["Failed"]
-    )
-    component_indicators["bus"] = {
-        "lf": lf_bus,
-        "red": red_bus,
-        "combined": combine_indicators(lf_bus, red_bus)
-    }
-
-    # sgen und storage besitzen in unserem Beispiel keine Lastflussdaten.
-    # Daher verwenden wir für den Lastflussindikator hier default-mäßig 1 (optimal),
-    # sodass der kombinierte Indikator allein von der Redundanz abhängt.
-    for comp in ["sgen", "storage"]:
-        red_comp = compute_red_indicator(
-            Success=red_results[comp]["Success"],
-            Fail=red_results[comp]["Failed"]
-        )
-        component_indicators[comp] = {
-            "lf": 1.0,
-            "red": red_comp,
-            "combined": combine_indicators(1.0, red_comp)
-        }
-
-    # Ausgabe der Indikatoren pro Komponente:
-    print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
-    for comp, inds in component_indicators.items():
-        print(f"{comp.capitalize()}:")
-        print(f"  Lastfluss: {inds['lf']:.3f}")
-        print(f"  Redundanz: {inds['red']:.3f}")
-        print(f"  Kombiniert: {inds['combined']:.3f}")
-
-    # Berechnung der Gesamtindikatoren
-    # Wir berechnen hier den Durchschnitt der Lastflussindikatoren und der Redundanzindikatoren
-    lf_total = 0
-    red_total = 0
-    count_lf = 0
-    count_red = 0
-    for comp, inds in component_indicators.items():
-        # Falls LF-Daten vorhanden sind:
-        if inds["lf"] is not None:
-            lf_total += inds["lf"]
-            count_lf += 1
-        if inds["red"] is not None:
-            red_total += inds["red"]
-            count_red += 1
-
-    overall_lf = lf_total / count_lf if count_lf > 0 else 1
-    overall_red = red_total / count_red if count_red > 0 else 1
-    overall_combined = (overall_lf + overall_red) / 2
-
-    print("\nGesamtindikatoren:")
-    print(f"  Lastfluss Gesamt: {overall_lf:.3f}")
-    print(f"  N-2 Redundanz Gesamt: {overall_red:.3f}")
-    print(f"  Kombinierter Gesamtindikator: {overall_combined:.3f}")
-
-if __name__ == '__main__':
-    main()

@@ -10,60 +10,77 @@ import time
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
-def n_3_redundancy_check(net_temp, element_counts, start_time, element_type, timeout):
-    if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage"]:
-        raise ValueError(f"Invalid element type: {element_type}")
+def n_3_redundancy_check(net_temp, element_counts, timeout=900):
+    results = {
+        "line": {"Success": 0, "Failed": 0},
+    #   "switch": {"Success": 0, "Failed": 0},
+    #    "load": {"Success": 0, "Failed": 0},
+        "sgen": {"Success": 0, "Failed": 0},
+        "trafo": {"Success": 0, "Failed": 0},
+        "bus": {"Success": 0, "Failed": 0},
+        "storage": {"Success": 0, "Failed": 0}
+    }
 
-    results = {element_type: {"Success": 0, "Failed": 0}}
+    # Create combinations of three elements for each type
+    element_triples = {
+        "line": list(itertools.combinations(net_temp.line.index, 3)) if not net_temp.line.empty else [],
+        "sgen": list(itertools.combinations(net_temp.sgen.index, 3)) if not net_temp.sgen.empty else [],
+        "trafo": list(itertools.combinations(net_temp.trafo.index, 3)) if not net_temp.trafo.empty else [],
+        "bus": list(itertools.combinations(net_temp.bus.index, 3)) if not net_temp.bus.empty else [],
+        "storage": list(itertools.combinations(net_temp.storage.index, 3)) if not net_temp.storage.empty else []
+    }
 
-    # Create combinations of three elements for the given type
-    element_triples = list(itertools.combinations(net_temp[element_type].index,3)) if not net_temp[element_type].empty else []
-
-    print(element_type)
     print(element_triples)
 
+    start_time = time.time()
     should_stop = False
 
-    # Process the selected element type in parallel
+    # Process each element type in parallel
     with ThreadPoolExecutor() as executor:
         futures = []
 
-        for triple in element_triples:
+        for element_type, triples in element_triples.items():
+
             if should_stop:
                 break
 
-            net_temp_copy = net_temp.deepcopy()
-            futures.append(executor.submit(process_triple, element_type, triple, net_temp_copy))
+            for triple in triples:
+                # Create a shallow copy of the network to simulate the failures
+                net_tempa = net_temp.deepcopy()
 
-            # Check timeout after each task submission
-            if (time.time() - start_time) > timeout:
-                print("Timeout reached. Ending process.")
-                should_stop = True
-                break
+                # pass copied net_temp
+                futures.append(executor.submit(process_triple, element_type, triple, net_tempa))
+
+                # Check timeout after each task submission
+                if (time.time() - start_time) > timeout:
+                    print("Timeout reached. Ending process.")
+                    should_stop = True
+                    break
 
         for future in futures:
             element_type, status = future.result()
             results[element_type][status] += 1
 
+
     return results
 
 
 # Function to process each triple and update results
-def process_triple(element_type, triple, net_temp):
+def process_triple(element_type, triple, net_tempa):
     # Set the elements out of service
     for element_id in triple:
-        net_temp[element_type].at[element_id, 'in_service'] = False
+        net_tempa[element_type].at[element_id, 'in_service'] = False
 
     # Check if the grid is still connected
     out_of_service_elements = {element_type: triple}
-    if not is_graph_connected(net_temp, out_of_service_elements):
+    if not is_graph_connected(net_tempa, out_of_service_elements):
         return element_type, "Failed"
 
     # Run the load flow calculation
     try:
         # First attempt with init="pf"
         pp.runopp(
-            net_temp,
+            net_tempa,
             init="pf",
             calculate_voltage_angles=True,  # Compute voltage angles
             enforce_q_lims=True,  # Enforce reactive power (Q) limits
@@ -72,11 +89,11 @@ def process_triple(element_type, triple, net_temp):
         return element_type, "Success"
 
     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-        #print(f"OPF did not converge with init='pf' for {element_type}, retrying with init='flat'")
+        print(f"OPF did not converge with init='pf' for {element_type}, retrying with init='flat'")
         try:
             # Retry with init="flat"
             pp.runopp(
-                net_temp,
+                net_tempa,
                 init="flat",
                 calculate_voltage_angles=True,  # Compute voltage angles
                 enforce_q_lims=True,  # Enforce reactive power (Q) limits
@@ -84,13 +101,13 @@ def process_triple(element_type, triple, net_temp):
             )
             return element_type, "Success"
         except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-            #print(f"OPF did not converge with init='flat' for {element_type}")
+            print(f"OPF did not converge with init='flat' for {element_type}")
             return element_type, "Failed"
         except Exception as e:
-            #print(f"Unexpected error for {element_type} with triple {triple} using init='flat': {e}")
+            print(f"Unexpected error for {element_type} with triple {triple} using init='flat': {e}")
             return element_type, "Failed"
     except Exception as e:
-        #print(f"Unexpected error for {element_type} with triple {triple} using init='pf': {e}")
+        print(f"Unexpected error for {element_type} with triple {triple} using init='pf': {e}")
         return element_type, "Failed"
 
 

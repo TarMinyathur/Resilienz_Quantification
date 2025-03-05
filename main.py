@@ -11,6 +11,7 @@ from count_elements import count_elements
 from diversity import calculate_shannon_evenness_and_variety
 from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, calculate_load_disparity
 from GenerationFactors import calculate_generation_factors
+from Redundancy_new import Redundancy
 from Redundancy import n_3_redundancy_check
 from visualize import plot_spider_chart
 from initialize import add_indicator
@@ -67,7 +68,7 @@ def increase_generation(net, factor):
 
 # Configuration
 basic = {
-    "Grid": "create_cigre_network_mv_pv_wind",  # Change this to select the grid
+    "Grid": "create_cigre_network_mv_all",  # Change this to select the grid
     "Adjustments": True,
     "Overview_Grid": False
 }
@@ -88,8 +89,9 @@ selected_indicators = {
     "disparity_trafo": True,
     "disparity_lines": True,
     "n_3_redundancy": True,
-    "n_3_redundancy_print": False,
-    "GraphenTheorie": False,
+    "n_3_redundancy_print": True,
+    "Redundancy":True,
+    "GraphenTheorie": True,
     "show_spider_plot": False,
     "print_results": True,
     "output_excel": False
@@ -215,7 +217,7 @@ def main():
             largest_component = max(nx.connected_components(G), key=len)
             G = G.subgraph(largest_component).copy()
 
-        GraphenTheorieIndicator(G, dfinalresults)
+        dfinalresults = GraphenTheorieIndicator(G, dfinalresults)
 
     if selected_indicators["disparity_generators"]:
         if not selected_indicators["self_sufficiency"]:
@@ -255,6 +257,36 @@ def main():
         ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
+    if selected_indicators["n_3_redundancy"]:
+        if not basic["Overview_Grid"]:
+            # Count elements and scaled elements
+            element_counts = count_elements(net)
+
+        # Liste der zu prüfenden Elementtypen
+        element_types = ["line", "sgen", "trafo", "bus", "storage"]
+
+        n3_redundancy_results = {}
+        Success = 0
+        Failed = 0
+        timeout = 300
+
+        # Über alle relevanten Elementtypen iterieren
+        for element_type in element_types:
+            start_time = time.time()
+            results = n_3_redundancy_check(net, element_counts, start_time, element_type, timeout)
+            n3_redundancy_results[element_type] = results[element_type]
+
+            # Summiere die Ergebnisse
+            Success += results[element_type]['Success']
+            Failed += results[element_type]['Failed']
+
+        # Gesamtrate berechnen
+        total_checks = Success + Failed
+        rate = Success / total_checks if total_checks != 0 else 0
+
+        # Ergebnis in DataFrame speichern
+        dfinalresults = add_indicator(dfinalresults, 'Overall n-3 Redundancy', rate)
+
     # if selected_indicators["n_3_redundancy"]:
     #     if not basic["Overview_Grid"]:
     #         element_counts = count_elements(net)
@@ -273,7 +305,34 @@ def main():
     #             print(
     #                 f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     #
-    #     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
+    #     dfinalresults = add_indicator(dfinalresults, 'Overall n-3 Redundancy', rate)
+
+    if selected_indicators["Redundancy"]:
+        Lastfluss, n2_Redundanz, kombi, component_indicators, red_results = Redundancy(net)
+        dfinalresults = add_indicator(dfinalresults, "Loadflow Redundancy", Lastfluss)
+        dfinalresults = add_indicator(dfinalresults, "N-2 Redundancy", n2_Redundanz)
+        dfinalresults = add_indicator(dfinalresults, "Combined Redundancy", kombi)
+
+        #dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
+        # Ausgabe der Indikatoren pro Komponente:
+        print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
+        for comp, inds in component_indicators.items():
+            print(f"{comp.capitalize()}:")
+            print(f"  Lastfluss: {inds['lf']:.3f}")
+            print(f"  Redundanz: {inds['red']:.3f}")
+            print(f"  Kombiniert: {inds['combined']:.3f}")
+
+        # Ergebnisse ausgeben
+        print("\nErgebnisse der N-2-Redundanzprüfung:")
+        for element, stats in red_results.items():
+            print(f"{element.capitalize()}: Erfolg: {stats['Success']}, Fehlgeschlagen: {stats['Failed']}")
+
+        print("\nGesamtindikatoren:")
+        print(f"  Lastfluss Gesamt: {Lastfluss:.3f}")
+        print(f"  N-2 Redundanz Gesamt: {n2_Redundanz:.3f}")
+        print(f"  Kombinierter Gesamtindikator: {kombi:.3f}")
+
+
     #
     # if selected_indicators["n_3_redundancy"]:
     #     if not basic["Overview_Grid"]:
@@ -294,42 +353,10 @@ def main():
     #             print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     #     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
-    if selected_indicators["n_3_redundancy"]:
-        if not basic["Overview_Grid"]:
-            # Count elements and scaled elements
-            element_counts = count_elements(net)
 
-        # Liste der zu prüfenden Elementtypen
-        element_types = ["sgen", "gen", "line", "trafo", "bus", "storage"]
-
-        n3_redundancy_results = {}
-        Success = 0
-        Failed = 0
-        timeout = 300
-
-        # Über alle relevanten Elementtypen iterieren
-        for element_type in element_types:
-            start_time = time.time()
-            results = n_3_redundancy_check(net, element_counts, start_time, element_type, timeout)
-            n3_redundancy_results[element_type] = results[element_type]
-
-            # Summiere die Ergebnisse
-            Success += results[element_type]['Success']
-            Failed += results[element_type]['Failed']
-
-            # Optional: Ergebnis für jeden Typ ausgeben
-            if selected_indicators["n_3_redundancy_print"]:
-                print(
-                    f"{element_type.capitalize()} - Success count: {results[element_type]['Success']}, Failed count: {results[element_type]['Failed']}")
-
-        # Gesamtrate berechnen
-        total_checks = Success + Failed
-        rate = Success / total_checks if total_checks != 0 else 0
-
-        # Ergebnis in DataFrame speichern
-        dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
     if selected_indicators["n_3_redundancy_print"]:
+        print("Results of N-3 Redundancy")
         for element_type, counts in n3_redundancy_results.items():
             print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     if selected_indicators["show_spider_plot"]:

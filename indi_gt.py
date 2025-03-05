@@ -46,6 +46,8 @@ def GraphenTheorieIndicator(Graph, dfinalresults):
 
     dfinalresults = add_indicator(dfinalresults, 'Modularity Index', max(0, modularity_index))
 
+    return dfinalresults
+
 def calculate_modularity_index(G, communities):
     modularity_index = 0.0
 
