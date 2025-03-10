@@ -6,41 +6,64 @@ import networkx as nx
 import pandapower.networks as pn
 from concurrent.futures import ProcessPoolExecutor
 import time
+import random
 
 
-def n_3_redundancy_check(net_temp, element_counts, start_time, element_type, timeout=900):
+def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
     results = {element_type: {"Success": 0, "Failed": 0}}
 
-    triples = (list(itertools.combinations(
-        net_temp[element_type].index,
-        min(3, element_counts["scaled_counts"].get(element_type, 0))
-    ))
-               if not net_temp[element_type].empty else [])
+    triples = (list(itertools.combinations(net_temp[element_type].index,3)) if not net_temp[element_type].empty else [])
+    random.shuffle(triples)
 
     print(f"Original network ID before copies: {id(net_temp)}")
 
-    for triple in triples:
-        if (time.time() - start_time) > timeout:
-            print("Timeout reached. Ending process.")
-            break
+    should_stop = False
 
-        net_copy = net_temp.deepcopy()  # Ensure a fresh copy
-        print(f"Processing bus triple: {triple} in network copy ID {id(net_temp)}")
-        print(f"Processing {element_type} triple: {triple} in network copy ID {id(net_copy)}")
+    # for triple in triples:
+    #     if (time.time() - start_time) > timeout:
+    #         print("Timeout reached. Ending process.")
+    #         break
+    #
+    #     net_copy = net_temp.deepcopy()  # Ensure a fresh copy
+    #     print(f"Processing bus triple: {triple} in network copy ID {id(net_temp)}")
+    #     print(f"Processing {element_type} triple: {triple} in network copy ID {id(net_copy)}")
+    #
+    #     etype, status = process_triple(element_type, triple, net_copy)
+    #     results[etype][status] += 1
+    #
+    # return results
 
-        etype, status = process_triple(element_type, triple, net_copy)
-        results[etype][status] += 1
+    # Process the selected element type in parallel
+    with ProcessPoolExecutor() as executor:
+        futures = []
+
+        for triple in triples:
+            if should_stop:
+                break
+
+            net_temp_copy = net_temp.deepcopy()
+            futures.append(executor.submit(process_triple, element_type, triple, net_temp_copy))
+
+            # Check timeout after each task submission
+            if (time.time() - start_time) > timeout:
+                print("Timeout reached. Ending process.")
+                should_stop = True
+                break
+
+        for future in futures:
+            element_type, status = future.result()
+            results[element_type][status] += 1
 
     return results
 
 
 def process_triple(element_type, triple, net_temp):
-    net_id = id(net_temp)  # Get unique identifier for this network instance
-    print(f"Processing {element_type} triple: {triple} in net ID {net_id}")
-
-    # Ensure that we are working on an independent network
-    initial_in_service = net_temp[element_type]['in_service'].sum()
-    print(f"Initial {element_type} in-service count: {initial_in_service}")
+    # net_id = id(net_temp)  # Get unique identifier for this network instance
+    # print(f"Processing {element_type} triple: {triple} in net ID {net_id}")
+    #
+    # # Ensure that we are working on an independent network
+    # initial_in_service = net_temp[element_type]['in_service'].sum()
+    # print(f"Initial {element_type} in-service count: {initial_in_service}")
 
     for element_id in triple:
         net_temp[element_type].at[element_id, 'in_service'] = False
@@ -50,7 +73,7 @@ def process_triple(element_type, triple, net_temp):
 
     # Run connectivity check
     if not is_graph_connected(net_temp, {element_type: triple}):
-        print(f"Graph not connected for {element_type} triple: {triple}")
+        #print(f"Graph not connected for {element_type} triple: {triple}")
         return element_type, "Failed"
 
     try:
@@ -63,7 +86,7 @@ def process_triple(element_type, triple, net_temp):
         )
         return element_type, "Success"
     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-        print(f"OPF did not converge with init='pf' for {element_type} triple: {triple}, retrying with init='flat'")
+        #print(f"OPF did not converge with init='pf' for {element_type} triple: {triple}, retrying with init='flat'")
         try:
             pp.runopp(
                 net_temp,
@@ -74,13 +97,13 @@ def process_triple(element_type, triple, net_temp):
             )
             return element_type, "Success"
         except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-            print(f"OPF did not converge with init='flat' for {element_type} triple: {triple}")
+            #print(f"OPF did not converge with init='flat' for {element_type} triple: {triple}")
             return element_type, "Failed"
         except Exception as e:
-            print(f"Unexpected error for {element_type} triple: {triple} using init='flat': {e}")
+            #print(f"Unexpected error for {element_type} triple: {triple} using init='flat': {e}")
             return element_type, "Failed"
     except Exception as e:
-        print(f"Unexpected error for {element_type} triple: {triple} using init='pf': {e}")
+        #print(f"Unexpected error for {element_type} triple: {triple} using init='pf': {e}")
         return element_type, "Failed"
 
 

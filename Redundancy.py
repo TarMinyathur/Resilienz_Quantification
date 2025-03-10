@@ -6,21 +6,24 @@ import networkx as nx
 import pandapower.networks as pn
 from concurrent.futures import ThreadPoolExecutor
 import time
+import random
 
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
-def n_3_redundancy_check(net_temp, element_counts, start_time, element_type, timeout):
-    if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage"]:
+def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
+    if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type: {element_type}")
 
     results = {element_type: {"Success": 0, "Failed": 0}}
 
     # Create combinations of three elements for the given type
     element_triples = list(itertools.combinations(net_temp[element_type].index,3)) if not net_temp[element_type].empty else []
+    random.shuffle(element_triples)
 
-    print(element_type)
-    print(element_triples)
+
+    # print(element_type)
+    # print(element_triples)
 
     should_stop = False
 

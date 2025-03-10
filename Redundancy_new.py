@@ -39,7 +39,7 @@ def Redundancy(net):
     lf_resultsb["bus"] = analyze_buses(net.res_bus[['vm_pu']])
 
     # Erzeugeranalyse (Generator-Pmax aus net.gen):
-    lf_resultsb["gen"] = analyze_generators(net.res_gen[['p_mw']], net.gen[['max_p_mw']])
+    lf_resultsb["gen"] = analyze_components_gen(net.res_gen[['p_mw']], net.gen[['max_p_mw']], net.sgen[['p_mw']], net.sgen[['max_p_mw']], net.storage[['p_mw']], net.storage[['max_p_mw']])
 
     # Ordentliche, formatierte Ausgabe:
     print("Ergebnisse der Lastflussanalyse:\n" + "-" * 40)
@@ -275,28 +275,33 @@ def analyze_buses(bus_data):
     return result
 
 
-def analyze_generators(gen_data, gen_max):
+def analyze_components_gen(gen_data, gen_max, sgen_data=None, sgen_max=None, stor_data=None, stor_max=None):
     """
-    Berechnet die prozentuale Auslastung der Generatoren anhand der aktuellen Leistung (p_mw)
-    im Verhältnis zur maximalen Leistung (max_p_mw).
-    Kritisch wird z. B. ein Generator bewertet, wenn er über 95 % seiner Kapazität arbeitet.
+    Berechnet die prozentuale Auslastung von Generatoren, statischen Generatoren (sgen) und Speichern (storages).
+    Kritisch wird eine Komponente bewertet, wenn sie über 95 % ihrer Kapazität arbeitet.
     Gibt die Ergebnisse als Dictionary zurück.
     """
-    if gen_data is not None and not gen_data.empty and gen_max is not None and not gen_max.empty:
-        # Berechne die Auslastung in Prozent
-        loading = (gen_data / gen_max) * 100
-        avg_loading = loading.mean()[0]
-        critical_threshold = 95  # z. B. 95% als Schwelle für kritische Auslastung
-        critical_count = (loading >= critical_threshold).sum()[0]
-        total_count = len(loading)
-        result = {
-            "avg_loading": avg_loading,
-            "num_crit": critical_count,
-            "total": total_count
-        }
-    else:
-        result = {"avg_loading": None, "num_crit": None, "total": 0}
-    return result
+
+    def analyze(data, max_data, name):
+        if data is not None and not data.empty and max_data is not None and not max_data.empty:
+            loading = (data / max_data) * 100
+            avg_loading = loading.mean()[0]
+            critical_threshold = 95
+            critical_count = (loading >= critical_threshold).sum()[0]
+            total_count = len(loading)
+            return {
+                "avg_loading": avg_loading,
+                "num_crit": critical_count,
+                "total": total_count
+            }
+        else:
+            return {"avg_loading": None, "num_crit": None, "total": 0}
+
+    return {
+        "generators": analyze(gen_data, gen_max, "generators"),
+        "sgen": analyze(sgen_data, sgen_max, "sgen"),
+        "storages": analyze(stor_data, stor_max, "storages")
+    }
 
 """
 Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.

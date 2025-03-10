@@ -5,12 +5,12 @@ import pandas as pd
 from functools import reduce
 epsilon = 1e-10
 
-def calculate_disparity_space(net, generation_factors):
+def calculate_disparity_space(net_b, generation_factors):
     """
     Calculate the disparity matrix and maximum integral disparity value for power generation units.
 
     Args:
-        net (object): Network object containing sgen, storage, and gen DataFrames.
+        net_b (object): net_bwork object containing sgen, storage, and gen DataFrames.
         generation_factors (dict): Dictionary of generation factors keyed by type.
 
     Returns:
@@ -22,7 +22,7 @@ def calculate_disparity_space(net, generation_factors):
 
     # Ensure required columns and set NaN or missing values to 0
     for df_name in ['sgen', 'storage', 'gen']:
-        df = getattr(net, df_name)
+        df = getattr(net_b, df_name)
         for col in ['p_mw', 'q_mvar', 'sn_mva']:
             if col not in df.columns:
                 df[col] = 0
@@ -31,31 +31,31 @@ def calculate_disparity_space(net, generation_factors):
 
     # Check for missing 'type' column and add if missing
     for df_name in ['sgen', 'storage', 'gen']:
-        df = getattr(net, df_name)
+        df = getattr(net_b, df_name)
         if 'type' not in df.columns:
             df['type'] = 'default'
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all sgen at each bus
-    if not net.sgen.empty:
-        net.sgen['effective_sn_mva'] = net.sgen.apply(
+    if not net_b.sgen.empty:
+        net_b.sgen['effective_sn_mva'] = net_b.sgen.apply(
             lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        sgen_sums = net.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        sgen_sums = net_b.sgen.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
     else:
         sgen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
     # Sum p_mw, q_mvar, and sn_mva*generation_factor over all storage at each bus
-    if not net.storage.empty:
-        net.storage['effective_sn_mva'] = net.storage.apply(
+    if not net_b.storage.empty:
+        net_b.storage['effective_sn_mva'] = net_b.storage.apply(
             lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        storage_sums = net.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        storage_sums = net_b.storage.groupby('bus')[['p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
     else:
         storage_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
 
     # Sum p_mw and sn_mva*generation_factor over all gen at each bus
-    if not net.gen.empty:
-        net.gen['effective_sn_mva'] = net.gen.apply(
+    if not net_b.gen.empty:
+        net_b.gen['effective_sn_mva'] = net_b.gen.apply(
             lambda row: row['sn_mva'] * generation_factors.get(row['type'], 1), axis=1)
-        gen_sums = net.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
+        gen_sums = net_b.gen.groupby('bus')[['p_mw', 'effective_sn_mva', 'sn_mva']].sum().reset_index()
         gen_sums['q_mvar'] = 0  # Add a zero q_mvar column to match other dataframes
     else:
         gen_sums = pd.DataFrame(columns=['bus', 'p_mw', 'q_mvar', 'effective_sn_mva', 'sn_mva'])
@@ -79,9 +79,9 @@ def calculate_disparity_space(net, generation_factors):
 
     # --- Incorporate Geodata ---
     # If generation units do not have geodata, merge bus geodata into total_sums.
-    # Assumes net.bus has columns 'bus', 'x', and 'y'
-    if not net.bus.empty and {'bus', 'x', 'y'}.issubset(net.bus.columns):
-        total_sums = pd.merge(total_sums, net.bus[['bus', 'x', 'y']], on='bus', how='left')
+    # Assumes net_b.bus has columns 'bus', 'x', and 'y'
+    if not net_b.bus.empty and {'bus', 'x', 'y'}.issubset(net_b.bus.columns):
+        total_sums = pd.merge(total_sums, net_b.bus[['bus', 'x', 'y']], on='bus', how='left')
         total_sums['x'] = total_sums['x'].fillna(0)
         total_sums['y'] = total_sums['y'].fillna(0)
     else:
@@ -123,12 +123,12 @@ def calculate_disparity_space(net, generation_factors):
 
     return disparity_df, max_integral_value
 
-def calculate_load_disparity(net):
+def calculate_load_disparity(net_b):
     """
     Calculate the disparity matrix and maximum integral disparity value for load characteristics.
 
     Args:
-        net (object): Network object containing load DataFrame with relevant columns.
+        net_b (object): net_bwork object containing load DataFrame with relevant columns.
 
     Returns:
         dict: {
@@ -138,42 +138,42 @@ def calculate_load_disparity(net):
     """
 
     # Ensure required columns and set NaN or missing values to 0
-    required_columns = ['p_mw', 'q_mvar', 'sn_mva', 'cos_phi', 'mode']
+    required_columns = ['p_mw', 'q_mvar', 'sn_mva', 'cos_phi', 'mode', 'controllable ']
     for col in required_columns:
-        if col not in net.load.columns:
-            net.load[col] = np.nan
+        if col not in net_b.load.columns:
+            net_b.load[col] = np.nan
 
     # Calculate missing p_mw and q_mvar if cos_phi and sn_mva are available
-    if net.load['p_mw'].isnull().any() or net.load['q_mvar'].isnull().any():
-        net.load['p_mw'] = net.load.apply(
+    if net_b.load['p_mw'].isnull().any() or net_b.load['q_mvar'].isnull().any():
+        net_b.load['p_mw'] = net_b.load.apply(
             lambda row: row['sn_mva'] * row['cos_phi'] if pd.notna(row['sn_mva']) and pd.notna(row['cos_phi']) else row['p_mw'],
             axis=1
         )
-        net.load['q_mvar'] = net.load.apply(
+        net_b.load['q_mvar'] = net_b.load.apply(
             lambda row: row['sn_mva'] * np.sqrt(1 - row['cos_phi'] ** 2)
             if pd.notna(row['sn_mva']) and pd.notna(row['cos_phi']) else row['q_mvar'],
             axis=1
         )
 
     # Calculate sn_mva if missing
-    if net.load['sn_mva'].isnull().any():
-        net.load['sn_mva'] = net.load.apply(
+    if net_b.load['sn_mva'].isnull().any():
+        net_b.load['sn_mva'] = net_b.load.apply(
             lambda row: np.sqrt(row['p_mw'] ** 2 + row['q_mvar'] ** 2)
             if pd.notna(row['p_mw']) and pd.notna(row['q_mvar']) else row['sn_mva'],
             axis=1
         )
 
     # Replace remaining NaN values with zeros
-    net.load.fillna(0, inplace=True)
+    net_b.load.fillna(0, inplace=True)
 
     # Prepare data for disparity calculation
-    load_data = net.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
+    load_data = net_b.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
 
     # --- Incorporate Geodata ---
     # If load-specific geodata is available, you could use it.
-    # Otherwise, merge bus geodata into load_data. We assume net.bus has 'bus', 'x', and 'y' columns.
-    if not net.bus.empty and {'bus', 'x', 'y'}.issubset(net.bus.columns):
-        load_data = pd.merge(load_data, net.bus[['bus', 'x', 'y']], on='bus', how='left')
+    # Otherwise, merge bus geodata into load_data. We assume net_b.bus has 'bus', 'x', and 'y' columns.
+    if not net_b.bus.empty and {'bus', 'x', 'y'}.issubset(net_b.bus.columns):
+        load_data = pd.merge(load_data, net_b.bus[['bus', 'x', 'y']], on='bus', how='left')
         load_data['x'] = load_data['x'].fillna(0)
         load_data['y'] = load_data['y'].fillna(0)
     else:
@@ -211,12 +211,12 @@ def calculate_load_disparity(net):
     return disparity_df, max_integral_value
 
 
-def calculate_transformer_disparity(net, debug=False):
+def calculate_transformer_disparity(net_b, debug=False):
     """
     Calculate the disparity matrix and maximum integral disparity value for transformer characteristics.
 
     Args:
-        net (object): Network object containing transformer DataFrame with relevant columns.
+        net_b (object): net_bwork object containing transformer DataFrame with relevant columns.
         debug (bool): If True, print debug information. Default is False.
 
     Returns:
@@ -227,46 +227,46 @@ def calculate_transformer_disparity(net, debug=False):
     required_columns = ['sn_mva', 'vn_hv_kv', 'vn_lv_kv', 'vkr_percent',
                         'vk_percent', 'pfe_kw', 'i0_percent', 'shift_degree']
     for column in required_columns:
-        if column not in net.trafo.columns:
-            raise ValueError(f"Ensure that '{column}' column exists in net.trafo")
+        if column not in net_b.trafo.columns:
+            raise ValueError(f"Ensure that '{column}' column exists in net_b.trafo")
 
     # Data Cleaning: Ensure all required columns are numeric and fill NaN with zero
     for column in required_columns:
-        net.trafo[column] = pd.to_numeric(net.trafo[column], errors='coerce').fillna(0)
+        net_b.trafo[column] = pd.to_numeric(net_b.trafo[column], errors='coerce').fillna(0)
 
     # *** Incorporate Bus Geodata ***
-    # Assuming net.bus should contain columns: 'bus_id', 'x', 'y'
-    # And net.trafo should have a column 'hv_bus' that corresponds to bus IDs.
+    # Assuming net_b.bus should contain columns: 'bus_id', 'x', 'y'
+    # And net_b.trafo should have a column 'hv_bus' that corresponds to bus IDs.
 
-    # Check for 'hv_bus' in net.trafo. If missing, set a default value.
-    if 'hv_bus' not in net.trafo.columns:
-        print("Warning: 'hv_bus' column missing in net.trafo. Defaulting to 0 for all entries.")
-        net.trafo['hv_bus'] = 0
+    # Check for 'hv_bus' in net_b.trafo. If missing, set a default value.
+    if 'hv_bus' not in net_b.trafo.columns:
+        print("Warning: 'hv_bus' column missing in net_b.trafo. Defaulting to 0 for all entries.")
+        net_b.trafo['hv_bus'] = 0
 
-    # Check if net.bus contains the required geodata columns
-    if not {'bus_id', 'x', 'y'}.issubset(net.bus.columns):
-        print("Warning: net.bus does not contain 'bus_id', 'x', and 'y' columns. Setting geodata to 0 for all buses.")
+    # Check if net_b.bus contains the required geodata columns
+    if not {'bus_id', 'x', 'y'}.issubset(net_b.bus.columns):
+        print("Warning: net_b.bus does not contain 'bus_id', 'x', and 'y' columns. Setting geodata to 0 for all buses.")
         # Create an empty DataFrame or a default mapping where every bus gets geodata of 0
-        # If bus_id exists in net.bus, use it; otherwise, assume an empty mapping.
-        if 'bus_id' in net.bus.columns:
-            bus_ids = net.bus['bus_id']
+        # If bus_id exists in net_b.bus, use it; otherwise, assume an empty mapping.
+        if 'bus_id' in net_b.bus.columns:
+            bus_ids = net_b.bus['bus_id']
             bus_geo = pd.DataFrame({'x': 0, 'y': 0}, index=bus_ids)
         else:
             bus_geo = pd.DataFrame({'x': [], 'y': []})
     else:
-        bus_geo = net.bus.set_index('bus_id')[['x', 'y']]
+        bus_geo = net_b.bus.set_index('bus_id')[['x', 'y']]
 
     # Map transformer high-voltage bus IDs to their coordinates
     # Use .get to handle missing bus entries safely (default to 0)
-    net.trafo['geo_x'] = net.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'x'] if b in bus_geo.index else 0)
-    net.trafo['geo_y'] = net.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'y'] if b in bus_geo.index else 0)
+    net_b.trafo['geo_x'] = net_b.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'x'] if b in bus_geo.index else 0)
+    net_b.trafo['geo_y'] = net_b.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'y'] if b in bus_geo.index else 0)
 
     if debug:
         print("\nDebug: Transformer Data After Cleaning and Adding Bus Geodata")
-        print(net.trafo[[*required_columns, 'hv_bus', 'geo_x', 'geo_y']].head())
+        print(net_b.trafo[[*required_columns, 'hv_bus', 'geo_x', 'geo_y']].head())
 
     # Combine numerical and geographic features
-    trafo_data = net.trafo[required_columns + ['geo_x', 'geo_y']].copy()
+    trafo_data = net_b.trafo[required_columns + ['geo_x', 'geo_y']].copy()
 
     if debug:
         print("\nDebug: Transformer Data After Cleaning")
@@ -289,41 +289,41 @@ def calculate_transformer_disparity(net, debug=False):
     max_integral_value = (n * (n - 1) / 2) * max_disparity
     max_integral_value = max(epsilon, max_integral_value)
 
-    # Clean up: remove added geodata columns from net.trafo to preserve original structure
-    net.trafo.drop(columns=['geo_x', 'geo_y'], inplace=True, errors='ignore')
+    # Clean up: remove added geodata columns from net_b.trafo to preserve original structure
+    net_b.trafo.drop(columns=['geo_x', 'geo_y'], inplace=True, errors='ignore')
 
     return disparity_df, max_integral_value
 
-def calculate_line_disparity(net, debug=False):
+def calculate_line_disparity(net_b, debug=False):
     # Ensure that line has the required columns
     required_columns = ['length_km', 'from_bus', 'to_bus', 'type',
                         'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka']
     for column in required_columns:
-        if column not in net.line.columns:
-            print(f"Ensure that '{column}' column exists in net.line")
+        if column not in net_b.line.columns:
+            print(f"Ensure that '{column}' column exists in net_b.line")
             return None
 
     # Normalize categorical columns
-    net.line['from_bus_norm'] = normalize_categorical(net.line['from_bus'])
-    net.line['to_bus_norm'] = normalize_categorical(net.line['to_bus'])
-    net.line['cable_type_norm'] = normalize_categorical(net.line['type'])
+    net_b.line['from_bus_norm'] = normalize_categorical(net_b.line['from_bus'])
+    net_b.line['to_bus_norm'] = normalize_categorical(net_b.line['to_bus'])
+    net_b.line['cable_type_norm'] = normalize_categorical(net_b.line['type'])
 
     # Process line_geodata if available
-    if hasattr(net, 'line_geodata') and not net.line_geodata.empty:
+    if hasattr(net_b, 'line_geodata') and not net_b.line_geodata.empty:
         # Extract centroid (average of coordinates)
-        net.line['geo_x'] = net.line_geodata['coords'].apply(lambda coords: np.mean([p[0] for p in coords]) if coords else 0)
-        net.line['geo_y'] = net.line_geodata['coords'].apply(lambda coords: np.mean([p[1] for p in coords]) if coords else 0)
+        net_b.line['geo_x'] = net_b.line_geodata['coords'].apply(lambda coords: np.mean([p[0] for p in coords]) if coords else 0)
+        net_b.line['geo_y'] = net_b.line_geodata['coords'].apply(lambda coords: np.mean([p[1] for p in coords]) if coords else 0)
     else:
         # Fallback: Assign 0 if no geodata available
-        net.line['geo_x'] = 0
-        net.line['geo_y'] = 0
+        net_b.line['geo_x'] = 0
+        net_b.line['geo_y'] = 0
 
     if debug:
         print("\nDebug: Line Data After Normalization")
-        print(net.line)
+        print(net_b.line)
 
     # Combine the metrics into a single dataframe
-    line_data = net.line[['length_km', 'from_bus_norm', 'to_bus_norm',
+    line_data = net_b.line[['length_km', 'from_bus_norm', 'to_bus_norm',
                           'cable_type_norm', 'r_ohm_per_km', 'x_ohm_per_km', 'max_i_ka', 'geo_x', 'geo_y']].copy()
 
     # Vectorized Disparity Matrix Calculation
@@ -343,9 +343,9 @@ def calculate_line_disparity(net, debug=False):
     # Print both counts in one row
     print("Bus | Original | Normed ")
     print("-" * 45)
-    for k in range(len(net.line)):
-        normed = net.line['to_bus_norm'][k]
-        original = net.line['to_bus'][k]
+    for k in range(len(net_b.line)):
+        normed = net_b.line['to_bus_norm'][k]
+        original = net_b.line['to_bus'][k]
         print(f"{k:<12} | {original:<14} | {normed:<20}")
 
     # Calculate max disparity and integral value
@@ -355,7 +355,7 @@ def calculate_line_disparity(net, debug=False):
 
     # **Remove normalized columns after calculation**
     columns_to_drop = ['from_bus_norm', 'to_bus_norm', 'cable_type_norm', 'geo_x', 'geo_y']
-    net.line.drop(columns=columns_to_drop, inplace=True, errors='ignore')
+    net_b.line.drop(columns=columns_to_drop, inplace=True, errors='ignore')
 
     return disparity_df, max_integral_value
 

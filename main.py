@@ -21,6 +21,8 @@ from adjustments import set_missing_limits
 from adjustments import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
+from flexibility import calculate_flexibility
+from buffer import calculate_buffer
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
@@ -75,23 +77,25 @@ basic = {
 
 selected_indicators = {
     "all": False,
-    "self_sufficiency": True,
-    "show_self_sufficiency_at_bus": True,
-    "system_self_sufficiency": True,
-    "generation_shannon_evenness": True,
-    "generation_variety": True,
-    "line_shannon_evenness": True,
-    "line_variety": True,
-    "load_shannon_evenness": True,
-    "load_variety": True,
-    "disparity_generators": True,
-    "disparity_load": True,
-    "disparity_trafo": True,
-    "disparity_lines": True,
-    "n_3_redundancy": True,
-    "n_3_redundancy_print": True,
-    "Redundancy":True,
-    "GraphenTheorie": True,
+    "self_sufficiency": False,
+    "show_self_sufficiency_at_bus": False,
+    "system_self_sufficiency": False,
+    "generation_shannon_evenness": False,
+    "generation_variety": False,
+    "line_shannon_evenness": False,
+    "line_variety": False,
+    "load_shannon_evenness": False,
+    "load_variety": False,
+    "disparity_generators": False,
+    "disparity_load": False,
+    "disparity_trafo": False,
+    "disparity_lines": False,
+    "n_3_redundancy": False,
+    "n_3_redundancy_print": False,
+    "Redundancy":False,
+    "GraphenTheorie": False,
+    "Flexibility": True,
+    "Buffer": True,
     "show_spider_plot": False,
     "print_results": True,
     "output_excel": False
@@ -263,7 +267,7 @@ def main():
             element_counts = count_elements(net)
 
         # Liste der zu prüfenden Elementtypen
-        element_types = ["line", "sgen", "trafo", "bus", "storage"]
+        element_types = ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]
 
         n3_redundancy_results = {}
         Success = 0
@@ -273,7 +277,7 @@ def main():
         # Über alle relevanten Elementtypen iterieren
         for element_type in element_types:
             start_time = time.time()
-            results = n_3_redundancy_check(net, element_counts, start_time, element_type, timeout)
+            results = n_3_redundancy_check(net, start_time, element_type, timeout)
             n3_redundancy_results[element_type] = results[element_type]
 
             # Summiere die Ergebnisse
@@ -353,7 +357,17 @@ def main():
     #             print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     #     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
+    if selected_indicators["Flexibility"]:
+        dflexiresults = calculate_flexibility(net)
+        dfinalresults = add_indicator(dfinalresults, 'Flex Monte Carlo', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Monte Carlo', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flex Netzreserve', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flex Erfolgreiche OPP', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Erfolgreiche OPP', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flex Reserve krit Leitungen', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibilität Gesamt', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
 
+    if selected_indicators["Buffer"]:
+        Speicher = calculate_buffer(net)
+        dfinalresults = add_indicator(dfinalresults, 'Buffer Capacity', Speicher)
 
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")
