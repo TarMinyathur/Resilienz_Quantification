@@ -1,5 +1,5 @@
 import pandapower.networks as pn
-
+import numpy as np
 
 # to be implemented in main in some kind of loop?
 # User interface to implement so scenario selection
@@ -7,15 +7,41 @@ import pandapower.networks as pn
 
 
 def define_scenario(net):
-    # print(net.sgen)
+    print(net.line)
    
-
+    
     # net = dunkelflaute(net) # done
-    net = h2_shortage(net) # done
+    # # einfluss wind?
+    # # einfluss pv?
+    # net = h2_shortage(net) # done
     # net = diesel_shortage(net) # done
-    # net = partial_outage(net) # flood, cyberattack, storm, earthquake  
+    # net = flood(net)
+    # net = sabotage(net)# # cyberattack -> trafos, pv 
+
+    # net = partial_outage(net, failure_perfenctage=0.2) 
+    
+    # # storm, earthquake überland leitungen (type: "ol" overhead line) gehen kaputt  
+
+def sabotage(net):
+    ...
 
 
+def flood(net):
+    # set PV and wind to 0
+    net.sgen.loc[net.sgen["type"] == "PV", "p_mw"] *= 0
+    net.sgen.loc[net.sgen["type"] == "WP", "p_mw"] *= 0
+    print("PV & Wind after:", ((net.sgen.loc[net.sgen["type"] == "PV", "p_mw"].sum()) + (net.sgen.loc[net.sgen["type"] == "WP", "p_mw"].sum())), "MW")
+
+    # set 80 % of underground lines (type cs) off (to False)
+    cs_lines = net.line[net.line["type"] == "cs"]
+    num_to_disable = int(len(cs_lines) * 0.88) # ~ 80 % of cs lines
+    lines_to_disable = np.random.choice(cs_lines.index, size=num_to_disable, replace=False)
+    net.line.loc[lines_to_disable, "in_service"] = False
+
+    # chef if "cs" lines are turned off
+    # print(f"Deaktivierte CS-Leitungen: {100 * net.line.loc[net.line['type'] == 'cs', 'in_service'].eq(False).mean():.2f}%")
+
+    return net
 
 
 def dunkelflaute(net): 
@@ -59,8 +85,30 @@ def diesel_shortage(net):
 
     return net
 
-def partial_outage(net):
-    ...
+
+def partial_outage(net, failure_percentage): # tb checked
+    # Set a seed for the same (reproduceable) results
+    np.random.seed(42)
+
+
+    # Simulate partial failure in generators (e.g., reduce their output by failure_percentage)
+    for index, row in net.sgen.iterrows():
+        failure_factor = 0.8  
+        net.sgen.at[index, 'p_mw'] *= failure_factor  # Reduce generator output
+    
+    # # Simulate partial failure in transformers (e.g., reduce their capacity by failure_percentage)
+    # for index, row in net.trafo.iterrows():
+    #     failure_factor = 1 - np.random.uniform(0, failure_percentage)  # Random partial failure
+    #     net.trafo.at[index, 'sn_mva'] *= failure_factor  # Reduce transformer capacity
+    
+    # # Simulate partial failure in lines (e.g., reduce their capacity by failure_percentage)
+    # for index, row in net.line.iterrows():
+    #     failure_factor = 1 - np.random.uniform(0, failure_percentage)  # Random partial failure
+    #     net.line.at[index, 'max_i_ka'] *= failure_factor  # Reduce line capacity
+    
+    print("Partial failure simulated with reduced capacities.")
+
+    return net
 
 
 if __name__ == "__main__":

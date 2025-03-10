@@ -1,6 +1,8 @@
 import pandapower as pp
 import pandapower.networks as pn
 import numpy as np
+import copy 
+
 
 class Scenario:
     def __init__(self, name, mode, targets, reduction_rate, random_select=True):
@@ -10,59 +12,45 @@ class Scenario:
         self.reduction_rate = reduction_rate
         self.random_select = random_select
 
-    # adapts net to scenario
-    def apply_modifications(self, net): 
-        # Mapping of component types to filtering logic
-        component_filters = {
-            "PV": lambda net: net.sgen[net.sgen["type"] == "PV"],
-            "WP": lambda net: net.sgen[net.sgen["type"] == "WP"],
-            "trafo": lambda net: net.trafo[net.trafo["name"].str.contains("Trafo", na=False)],
-            "underground_lines": lambda net: net.line[net.line["type"] == "cs"],  # Underground line
-            "overhead_lines": lambda net: net.line[net.line["type"] == "ol"],  # Overhead line
+        # dictionary for accessing and "damaging" components correctly
+        self.component_data = {
+                    "PV": {"filter": lambda net: net.sgen[net.sgen["type"] == "PV"], "element": "sgen", "column": "p_mw"},
+                    "WP": {"filter": lambda net: net.sgen[net.sgen["type"] == "WP"], "element": "sgen", "column": "p_mw"},
+                    "trafo": {"filter": lambda net: net.trafo, "element": "trafo", "column": "in_service"},
+                    "underground_lines": {"filter": lambda net: net.line[net.line["type"] == "cs"], "element": "line", "column": "in_service"},
+                    "overhead_lines": {"filter": lambda net: net.line[net.line["type"] == "ol"], "element": "line", "column": "in_service"},
         }
 
-        if self.mode == "types":  # Apply changes to all components of a type
-            for target in self.targets:
-                if target in component_filters:
-                    net.sgen.loc[net.sgen["type"] == target, "p_mw"] *= self.reduction_rate
+    # adapts net to scenario
+    def apply_modifications(self, net): 
+        for target in self.targets:
+            if target not in self.component_data:
+                print(f"Add target {target} to target list or select different target.")
+                continue  # unknown target, continue to next iteration
+
+            df = self.component_data[target]["filter"](net)  # call component filters and get df 
+        
+            if df.empty:
+                print(f"Target {target} does not exist in net. Will be skipped")
+                continue  # if empty target --> next
+
+            # get access to components (elements to be attacked and thei column, e.g. p_mw or "in_service")
+            element, column = self.component_data[target]["element"], self.component_data[target]["column"]
+
+            if self.mode == "types":  # Apply changes to all components of a type
+                if column == "p_mw":
+                    net[element].loc[df.index, column] *= self.reduction_rate
                 else:
-                    print(f"Warning: Unknown component type '{target}'")
+                    False
 
-        elif self.mode == "components":  # Apply changes to specific components
-            for target in self.targets:
-                if target in component_filters:
-                    df = component_filters[target](net)  # Apply filter function
-                else:
-                    print(f"{target} not in net")
-                    continue
-
-                num_components = len(df)
-                print(f"Amount Components in {target}: {num_components}")
-
-                if num_components > 0:
-                    num_to_disable = int(num_components * self.reduction_rate)
-                    indices = (
-                        np.random.choice(df.index, size=num_to_disable, replace=False)
-                        if self.random_select else df.index[:num_to_disable]
-                    )
-
-                    # Deactivate the components
-                    if target in ["PV", "WP"]:
-                        net.sgen.loc[indices, "in_service"] = False
-                    elif target in ["underground_lines", "overhead_lines"]:
-                        net.line.loc[indices, "in_service"] = False  # 🔥 Fix: Direkt auf net.line schreiben
-                    else:
-                        net[target].loc[indices, "in_service"] = False
+            elif self.mode == "components":  # Apply changes to specific components
+                num_to_disable = int(len(df) * self.reduction_rate)
+                indices = (
+                    np.random.choice(df.index, size=num_to_disable, replace=False)
+                    if self.random_select else df.index[:num_to_disable]
+                )
+                net[element].loc[indices, "in_service"] = False
         return net
-
-
-def get_scenarios():  # Define all potential scenarios
-    return [
-        Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.05),
-        Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
-        Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate=1, random_select=False),
-        # Add more scenarios as needed
-    ]
 
 
 def scenarios(net, selected_scenarios):
@@ -71,19 +59,31 @@ def scenarios(net, selected_scenarios):
 
     for scenario in scenarios_list:
         if scenario.name in selected_scenarios:
-            modified_net = scenario.apply_modifications(net)  # Apply scenario modifications
+            net_copy = copy.deepcopy(net)   # blanko net for each scenario
+            modified_net = scenario.apply_modifications(net_copy)  # Apply scenario modifications
             modified_nets.append(modified_net)  # Store modified net
 
     return modified_nets
 
 
+def get_scenarios():  # Define all potential scenarios
+    return [
+        Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.0),
+        Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
+        Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate= 0.5, random_select=False),
+        #  Scenario("..., geo")
+        # Add more scenarios as needed
+    ]
+
+
 if __name__ == "__main__":
     net = pn.create_cigre_network_mv(with_der="all")
-    # print(net)
+    # net = pn.create_cigre_network_mv(with_der=False)
+    # print(net.sgen)
     # print(net.line)
     # print(net.trafo)
 
-    selected_scenarios = ["sabotage"]
+    selected_scenarios = ["sabotage"]   # einzelnes aufrufen funktioniert
 
     scenarios_list = get_scenarios()
     valid_scenario_names = [scenario.name for scenario in scenarios_list]
@@ -95,5 +95,5 @@ if __name__ == "__main__":
         print(f"Amount of modified nets: {len(modified_nets)}")
 
         for i, modified_net in enumerate(modified_nets):
-            print(f"Netz {i+1} - sgen Tabelle:")
-            print(modified_net.trafo)
+            print(f"Netz Scenario {i+1} - sgen Tabelle: \n {modified_net.trafo}")
+            
