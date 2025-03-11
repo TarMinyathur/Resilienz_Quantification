@@ -23,6 +23,7 @@ from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
 from flexibility import calculate_flexibility
 from buffer import calculate_buffer
+from fxor import flexibility_fxor
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
@@ -55,16 +56,19 @@ def increase_generation(net, factor):
     for idx, gen in net.gen.iterrows():
         net.gen.at[idx, 'p_mw'] *= factor
         net.gen.at[idx, 'q_mvar'] *= factor
+        net.gen.at[idx, 'sn_mva'] *= factor^2
 
     # 2. Increase for sgen (verteilte Erzeugung)
     for idx, sgen in net.sgen.iterrows():
         net.sgen.at[idx, 'p_mw'] *= factor
         net.sgen.at[idx, 'q_mvar'] *= factor
+        net.sgen.at[idx, 'sn_mva'] *= factor^2
 
     # 3. Increase for storage (Speicher)
     for idx, storage in net.storage.iterrows():
         net.storage.at[idx, 'p_mw'] *= factor
         net.storage.at[idx, 'q_mvar'] *= factor
+        net.storage.at[idx, 'sn_mva'] *= factor^2
 
     return net
 
@@ -90,11 +94,12 @@ selected_indicators = {
     "disparity_load": False,
     "disparity_trafo": False,
     "disparity_lines": False,
-    "n_3_redundancy": False,
+    "n_3_redundancy": True,
     "n_3_redundancy_print": False,
-    "Redundancy":False,
+    "Redundancy":True,
     "GraphenTheorie": False,
     "Flexibility": True,
+    "Flexibility_fxor": True,
     "Buffer": True,
     "show_spider_plot": False,
     "print_results": True,
@@ -368,6 +373,10 @@ def main():
     if selected_indicators["Buffer"]:
         Speicher = calculate_buffer(net)
         dfinalresults = add_indicator(dfinalresults, 'Buffer Capacity', Speicher)
+
+    if selected_indicators["Flexibility_fxor"]:
+        Flex_fxor = flexibility_fxor(net, True)
+        dfinalresults = add_indicator(dfinalresults, 'Feasible operating region', Flex_fxor)
 
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")

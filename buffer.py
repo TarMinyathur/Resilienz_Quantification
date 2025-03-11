@@ -1,5 +1,6 @@
 
 def calculate_buffer(net_buff):
+
     total_load = net_buff.load["p_mw"].sum()
     print(f"Total net_buff load: {total_load} MW")
 

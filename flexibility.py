@@ -2,10 +2,6 @@ import pandapower as pp
 import numpy as np
 import pandas as pd
 from pandapower import runopp
-
-from adjustments import set_missing_limits
-from adjustments import determine_minimum_ext_grid_power
-
 from initialize import add_indicator
 
 
@@ -14,7 +10,6 @@ def calculate_flexibility(net_flex):
     dflexresults = pd.DataFrame(columns=['Indicator', 'Value'])
     flex1 = calculate_flexibility_monte(net_flex)
     dflexresults = add_indicator(dflexresults, 'Flex Monte Carlo', flex1)
-
     flex2 = calculate_net_flexwork_reserve(net_flex)
     dflexresults = add_indicator(dflexresults, 'Flex Netzreserve', flex2)
     flex3 = calculate_opf_success_rate(net_flex)
@@ -35,7 +30,7 @@ def calculate_flexibility_monte(net_flexa):
     # net_flexa = set_missing_limits(net_flexa, required_p_mw, required_q_mvar)
 
     # Anzahl Monte-Carlo-Simulationen
-    N = 50
+    N = 5
     variation_percent = 0.1  # +/-10% Variation
 
     flex_index_values = []
@@ -43,7 +38,7 @@ def calculate_flexibility_monte(net_flexa):
     orig_sgen_p = net_flexa.sgen.p_mw.copy()
 
     # Berechnung der maximalen externen Einspeisung als Normierungsbasis
-    max_ext_grid_power = np.abs(net_flexa.ext_grid["s_sc_max_mva"].sum()) if not net_flexa.ext_grid.empty else 1e-6
+    max_ext_grid_power = np.abs(net_flexa.ext_grid["max_p_mw"].sum()) if not net_flexa.ext_grid.empty else 1e-6
 
     for _ in range(N):
         # Zufällige Variation von Lasten & Einspeisungen
