@@ -61,7 +61,7 @@ def scenarios(net, selected_scenarios):
         if scenario.name in selected_scenarios:
             net_copy = copy.deepcopy(net)   # blanko net for each scenario
             modified_net = scenario.apply_modifications(net_copy)  # Apply scenario modifications
-            modified_nets.append(modified_net)  # Store modified net
+            modified_nets.append((scenario.name, modified_net))  # Store scenario name and modified net as tulple for mapping/ association
 
     return modified_nets
 
@@ -71,6 +71,7 @@ def get_scenarios():  # Define all potential scenarios
         Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.0),
         Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
         Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate= 0.5, random_select=False),
+        Scenario("sabotage_2", mode="components", targets=["trafo"], reduction_rate= 1, random_select=False),
         #  Scenario("..., geo")
         # Add more scenarios as needed
     ]
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     # print(net.line)
     # print(net.trafo)
 
-    selected_scenarios = ["sabotage"]   # einzelnes aufrufen funktioniert
+    selected_scenarios = ["sabotage", "sabotage_2", "hagel"]   # einzelnes aufrufen funktioniert
 
     scenarios_list = get_scenarios()
     valid_scenario_names = [scenario.name for scenario in scenarios_list]
@@ -94,6 +95,7 @@ if __name__ == "__main__":
         modified_nets = scenarios(net, selected_scenarios)
         print(f"Amount of modified nets: {len(modified_nets)}")
 
-        for i, modified_net in enumerate(modified_nets):
-            print(f"Netz Scenario {i+1} - sgen Tabelle: \n {modified_net.trafo}")
+        for name, modified_net in modified_nets:
+            print(f"Scenario {name} - Trafo Tabelle: \n {modified_net.trafo}")
+            print(f"Scenario {name} - sgen Tabelle: \n {modified_net.sgen}")
             
