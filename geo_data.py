@@ -1,5 +1,6 @@
 import pandapower.networks as pn
 import numpy as np
+import matplotlib.pyplot as plt
 
 net = pn.create_cigre_network_mv(with_der="all")
 # print(f"net before: {net}")
@@ -62,10 +63,41 @@ if x_coords and y_coords:
 
     print(f"Buses to be disabled: {list(buses_to_disable)}")
 
-
-
-
+        # Visualize the network
+    fig, ax = plt.subplots(figsize=(10, 8))
     
+    # Plot bus coordinates
+    if not net.bus_geodata.empty:
+        ax.scatter(net.bus_geodata["x"], net.bus_geodata["y"], c="blue", s=50, label="Buses")
+        for idx, row in net.bus_geodata.iterrows():
+            ax.text(row["x"], row["y"], str(idx), fontsize=9, color='black', ha='right', va='bottom')
+
+
+    # Plot line coordinates if available
+    if not net.line_geodata.empty:
+        for coords in net.line_geodata["coords"].dropna():
+            x_line = [c[0] for c in coords]
+            y_line = [c[1] for c in coords]
+            ax.plot(x_line, y_line, color="gray", lw=1, label="Lines")
+            # Compute midpoint for label
+            mid_x = np.mean(x_line)
+            mid_y = np.mean(y_line)
+            ax.text(mid_x, mid_y, str(idx), fontsize=8, color='purple', ha='center', va='center')
+
+
+    # Draw the selected region as a red rectangle
+    from matplotlib.patches import Rectangle
+    rect = Rectangle((x_start, y_start), side_length, side_length, linewidth=2, edgecolor="red", facecolor="none", label="Destruction Area")
+    ax.add_patch(rect)
+    
+    ax.set_xlabel("X Coordinate")
+    ax.set_ylabel("Y Coordinate")
+    ax.set_title("Network Visualization with Destruction Area")
+    ax.legend()
+    plt.show()
+
+
+
 
     # Disable buses and all connected elements
     net.bus.loc[buses_to_disable, "in_service"] = False
