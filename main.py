@@ -3,7 +3,7 @@ import pandapower.networks as pn
 #import itertools
 #import math
 import networkx as nx
-#import numpy as np
+import numpy as np
 import pandas as pd
 #import matplotlib.pyplot as plt
 import time
@@ -56,19 +56,19 @@ def increase_generation(net, factor):
     for idx, gen in net.gen.iterrows():
         net.gen.at[idx, 'p_mw'] *= factor
         net.gen.at[idx, 'q_mvar'] *= factor
-        net.gen.at[idx, 'sn_mva'] *= factor^2
+        net.gen.at[idx, 'sn_mva'] = np.sqrt(net.gen.at[idx, 'p_mw']**2 + net.gen.at[idx, 'q_mvar']**2)
 
     # 2. Increase for sgen (verteilte Erzeugung)
     for idx, sgen in net.sgen.iterrows():
         net.sgen.at[idx, 'p_mw'] *= factor
         net.sgen.at[idx, 'q_mvar'] *= factor
-        net.sgen.at[idx, 'sn_mva'] *= factor^2
+        net.sgen.at[idx, 'sn_mva'] = np.sqrt(net.sgen.at[idx, 'p_mw']**2 + net.sgen.at[idx, 'q_mvar']**2)
 
     # 3. Increase for storage (Speicher)
     for idx, storage in net.storage.iterrows():
         net.storage.at[idx, 'p_mw'] *= factor
         net.storage.at[idx, 'q_mvar'] *= factor
-        net.storage.at[idx, 'sn_mva'] *= factor^2
+        net.storage.at[idx, 'sn_mva'] = np.sqrt(net.storage.at[idx, 'p_mw']**2 + net.storage.at[idx, 'q_mvar']**2)
 
     return net
 
@@ -95,12 +95,12 @@ selected_indicators = {
     "disparity_trafo": False,
     "disparity_lines": False,
     "n_3_redundancy": True,
-    "n_3_redundancy_print": False,
+    "n_3_redundancy_print": True,
     "Redundancy":True,
-    "GraphenTheorie": False,
-    "Flexibility": True,
-    "Flexibility_fxor": True,
-    "Buffer": True,
+    "GraphenTheorie": True,
+    "Flexibility": False,
+    "Flexibility_fxor": False,
+    "Buffer": False,
     "show_spider_plot": False,
     "print_results": True,
     "output_excel": False
@@ -195,34 +195,59 @@ def main():
         # Create an empty NetworkX graph
         G = nx.Graph()
 
-        # Add nodes from Pandapower network
-        for bus in net.bus.index:
-            G.add_node(bus)
+        # 1) Busse als Knoten hinzufügen
+        for bus_id in net.bus.index:
+            G.add_node(bus_id)
 
+        # 2) Leitungen als Kanten hinzufügen (unter Berücksichtigung geschlossener Schalter)
         for idx, line in net.line.iterrows():
             from_bus = line.from_bus
             to_bus = line.to_bus
 
-            # Check if there is a switch between from_bus and to_bus
+            # Prüfen, ob ein Schalter (switch.et == 'l') zwischen den Bussen liegt
             switch_exists = False
-            for _, switch in net.switch.iterrows():
-                if switch.bus == from_bus and switch.element == to_bus and switch.et == 'l':
-                    switch_exists = True
-                    switch_closed = switch.closed
-                    break
-                elif switch.bus == to_bus and switch.element == from_bus and switch.et == 'l':
-                    switch_exists = True
-                    switch_closed = switch.closed
-                    break
+            switch_closed = True  # wird nur dann False, wenn wir tatsächlich einen offenen Switch finden
 
-            # Only add the edge if there is no switch or if the switch is closed
+            for _, sw in net.switch.iterrows():
+                if sw.et == 'l':
+                    # Bus- und Element-Kombination checken
+                    if (sw.bus == from_bus and sw.element == to_bus) or (sw.bus == to_bus and sw.element == from_bus):
+                        switch_exists = True
+                        switch_closed = sw.closed
+                        break
+
+            # Nur Kante hinzufügen, wenn kein Switch existiert ODER er geschlossen ist
             if not switch_exists or (switch_exists and switch_closed):
+                # Als Gewicht nehmen wir hier exemplarisch die Leitungslänge
                 length = line.length_km
                 G.add_edge(from_bus, to_bus, weight=length)
 
-        # checks if G is complete connected, otherwise the largest subgraph is analyzed going forward
+        # 3) Trafos als Kanten hinzufügen (ebenfalls optional mit Schalter-Check)
+        for idx, trafo in net.trafo.iterrows():
+            hv_bus = trafo.hv_bus
+            lv_bus = trafo.lv_bus
+
+            # Prüfen, ob ein Schalter (switch.et == 't') zum Trafo existiert
+            switch_exists = False
+            switch_closed = True
+
+            for _, sw in net.switch.iterrows():
+                if sw.et == 't':
+                    # Bei Trafos ist meist bus = hv_bus oder lv_bus und element = trafo.id
+                    # Hier einfacher Check: falls bus einer der beiden ist und switch.element == diesem Trafo
+                    if sw.bus in [hv_bus, lv_bus] and sw.element == idx:
+                        switch_exists = True
+                        switch_closed = sw.closed
+                        break
+
+            # Nur Kante hinzufügen, wenn kein Trafo-Switch existiert ODER dieser geschlossen ist
+            if not switch_exists or (switch_exists and switch_closed):
+                # Beispiel: Als Gewicht kannst du beliebig etwas hinterlegen (z. B. trafo.sn_mva)
+                G.add_edge(hv_bus, lv_bus, weight=1.0)
+
+        # 4) Prüfen, ob der Graph zusammenhängend ist
         if not nx.is_connected(G):
-            # Get largest connected component
+            # Größte zusammenhängende Komponente extrahieren
             largest_component = max(nx.connected_components(G), key=len)
             G = G.subgraph(largest_component).copy()
 
@@ -288,6 +313,7 @@ def main():
             # Summiere die Ergebnisse
             Success += results[element_type]['Success']
             Failed += results[element_type]['Failed']
+            print(time.time() - start_time)
 
         # Gesamtrate berechnen
         total_checks = Success + Failed
@@ -296,25 +322,6 @@ def main():
         # Ergebnis in DataFrame speichern
         dfinalresults = add_indicator(dfinalresults, 'Overall n-3 Redundancy', rate)
 
-    # if selected_indicators["n_3_redundancy"]:
-    #     if not basic["Overview_Grid"]:
-    #         element_counts = count_elements(net)
-    #     start_time = time.time()
-    #     n3_redundancy_results = n_3_redundancy_check(net, element_counts, start_time)
-    #
-    #     # Correctly compute Success and Failed only once
-    #     Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
-    #     Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
-    #     total_checks = Success + Failed
-    #     rate = Success / total_checks if total_checks != 0 else 0
-    #
-    #     # Print without altering the Success/Failed values
-    #     for element_type, counts in n3_redundancy_results.items():
-    #         if selected_indicators["n_3_redundancy_print"]:
-    #             print(
-    #                 f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
-    #
-    #     dfinalresults = add_indicator(dfinalresults, 'Overall n-3 Redundancy', rate)
 
     if selected_indicators["Redundancy"]:
         Lastfluss, n2_Redundanz, kombi, component_indicators, red_results = Redundancy(net)
@@ -340,27 +347,6 @@ def main():
         print(f"  Lastfluss Gesamt: {Lastfluss:.3f}")
         print(f"  N-2 Redundanz Gesamt: {n2_Redundanz:.3f}")
         print(f"  Kombinierter Gesamtindikator: {kombi:.3f}")
-
-
-    #
-    # if selected_indicators["n_3_redundancy"]:
-    #     if not basic["Overview_Grid"]:
-    #         # Count elements and scaled elements
-    #         element_counts = count_elements(net)
-    #     start_time = time.time()
-    #     n3_redundancy_results = n_3_redundancy_check(net, element_counts, start_time)
-    #     Success = sum(counts['Success'] for counts in n3_redundancy_results.values())
-    #     Failed = sum(counts['Failed'] for counts in n3_redundancy_results.values())
-    #     total_checks = Success + Failed
-    #     rate = Success / total_checks if total_checks != 0 else 0
-    #     for element_type, counts in n3_redundancy_results.items():
-    #         Success += counts['Success']
-    #         Failed += counts['Failed']
-    #         total_checks = Success + Failed
-    #         rate = Success / total_checks if total_checks != 0 else 0
-    #         if selected_indicators["n_3_redundancy_print"]:
-    #             print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
-    #     dfinalresults = add_indicator(dfinalresults, 'Overall 70% Redundancy', rate)
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)

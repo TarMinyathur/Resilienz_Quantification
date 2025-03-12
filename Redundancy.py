@@ -4,14 +4,16 @@ import pandapower as pp
 import itertools
 import networkx as nx
 import pandapower.networks as pn
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 import time
 import random
 
+"Aufgrund der CPU-lastigen Natur der OPF-Berechnungen würde man ohne GIL-Freigabe der Libraries eindeutig zum ProcessPoolExecutor greifen. Falls deine numerischen Routinen aber tatsächlich den GIL freigeben (was sehr oft der Fall ist), können Threads einen guten Kompromiss aus geringerem Overhead und echter Parallelität darstellen."
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
 def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
+
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type: {element_type}")
 
@@ -19,8 +21,8 @@ def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
 
     # Create combinations of three elements for the given type
     element_triples = list(itertools.combinations(net_temp[element_type].index,3)) if not net_temp[element_type].empty else []
-    random.shuffle(element_triples)
 
+    random.shuffle(element_triples)
 
     # print(element_type)
     # print(element_triples)
@@ -28,7 +30,7 @@ def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
     should_stop = False
 
     # Process the selected element type in parallel
-    with ThreadPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=4) as executor:
         futures = []
 
         for triple in element_triples:
@@ -98,42 +100,72 @@ def process_triple(element_type, triple, net_temp):
 
 
 def is_graph_connected(net_temp, out_of_service_elements):
-    # Create NetworkX graph manually
+    """
+    Prüft, ob das Netz nach dem Rausnehmen bestimmter Elemente (bspw. n-3-Fälle) noch zusammenhängend ist.
+    out_of_service_elements ist ein Dictionary, z.B. {"line": [2, 5], "bus": [3], ...}.
+    """
+
+    # Neues Graph-Objekt
     G = nx.Graph()
 
-    # Add buses
-    for bus in net_temp.bus.itertuples():
-        if bus.Index not in out_of_service_elements.get('line', []):
-            G.add_nodes_from(net_temp.bus.index)
+    # 1) Buses hinzufügen
+    #    Nur die Busse, die als in_service=True gelten UND nicht in out_of_service_elements['bus'] stehen
+    for bus_id, bus in net_temp.bus.iterrows():
+        if bus.in_service and bus_id not in out_of_service_elements.get('bus', []):
+            G.add_node(bus_id)
 
-    # Add lines
-    for line in net_temp.line.itertuples():
-        if line.Index not in out_of_service_elements.get('line', []):
-            # G.add_edge(line.from_bus, line.to_bus)
-            for idx, line in net_temp.line.iterrows():
-                from_bus = line.from_bus
-                to_bus = line.to_bus
+    # 2) Lines hinzufügen
+    #    Auch hier schauen wir, ob die Leitung in_service=True ist und nicht in out_of_service_elements['line'] steht.
+    #    Zusätzlich prüfen wir, ob eventuell ein Switch zwischen den Bussen liegt und geschlossen/in Service ist.
+    for line_id, line in net_temp.line.iterrows():
+        if line.in_service and line_id not in out_of_service_elements.get('line', []):
+            from_bus = line.from_bus
+            to_bus = line.to_bus
 
-                # Check if there is a switch between from_bus and to_bus
-                switch_exists = False
-                for _, switch in net_temp.switch.iterrows():
-                    if switch.bus == from_bus and switch.element == to_bus and switch.et == 'l':
+            # Erst prüfen, ob die entsprechenden Busse noch im Graphen sind
+            if from_bus not in G or to_bus not in G:
+                continue
+
+            # Schauen, ob es einen Switch gibt, der diese Verbindung öffnet
+            # (switch.et == 'l' und bus-element-Kombination == (from_bus, to_bus) oder umgekehrt).
+            switch_exists = False
+            switch_closed = True
+
+            for sw_id, sw in net_temp.switch.iterrows():
+                if sw.et == 'l':
+                    # Ein Switch koppelt dieselben Busse? (bus == from_bus, element == to_bus) oder umgekehrt
+                    if ((sw.bus == from_bus and sw.element == to_bus) or
+                        (sw.bus == to_bus and sw.element == from_bus)):
+
                         switch_exists = True
-                        switch_closed = switch.closed
+
+                        # Prüfen, ob der Switch geschlossen und in_service ist und NICHT in out_of_service_elements
+                        if (not sw.closed or
+                            not sw.in_service or
+                            sw_id in out_of_service_elements.get('switch', [])):
+                            switch_closed = False
                         break
-                    elif switch.bus == to_bus and switch.element == from_bus and switch.et == 'l':
-                        switch_exists = True
-                        switch_closed = switch.closed
-                        break
 
-                # Only add the edge if there is no switch or if the switch is closed
-                if not switch_exists or (switch_exists and switch_closed):
-                    G.add_edge(from_bus, to_bus)
+            # Nur Kante hinzufügen, wenn entweder kein Switch existiert,
+            # oder er existiert und ist tatsächlich geschlossen/in service
+            if (not switch_exists) or (switch_exists and switch_closed):
+                G.add_edge(from_bus, to_bus)
 
-    # Add transformers
-    for trafo in net_temp.trafo.itertuples():
-        if trafo.Index not in out_of_service_elements.get('trafo', []):
-            G.add_edge(trafo.hv_bus, trafo.lv_bus)
+    # 3) Trafos hinzufügen (analog zu Lines)
+    for trafo_id, trafo in net_temp.trafo.iterrows():
+        if trafo.in_service and trafo_id not in out_of_service_elements.get('trafo', []):
+            hv_bus = trafo.hv_bus
+            lv_bus = trafo.lv_bus
 
-    # Check if the graph is still connected
+            # Nur add_edge, wenn diese Busse noch im Graph sind
+            if hv_bus in G and lv_bus in G:
+                G.add_edge(hv_bus, lv_bus)
+
+    # Abschließende Prüfung, ob der Graph zusammenhängend ist.
+    # Wenn G leer ist (z.B. alle Busse entfernt), führt nx.is_connected(G) zu einem Fehler.
+    # Deswegen vorher abfangen:
+    if len(G) == 0:
+        # Je nach Definition könnte ein leeres Netz auch als "nicht verbunden" gewertet werden
+        return False
+
     return nx.is_connected(G)

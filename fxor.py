@@ -4,6 +4,7 @@ import shapely.geometry as geom
 from shapely.ops import orient
 from shapely.geometry import Polygon, Point
 import matplotlib.pyplot as plt
+import numpy as np
 
 def flexibility_fxor (net_flex, visualize):
 
@@ -31,7 +32,7 @@ def flexibility_fxor (net_flex, visualize):
     sum_q = net_flex.load["q_mvar"].sum()
 
     # 3) Vergleich ausgeben
-    flexibility = min(1 , sum_area_polygons / (sum_p + sum_q))
+    flexibility = min(1 , sum_area_polygons / np.sqrt(sum_p**2 + sum_q**2))
     print(f"Verhältnis (Summe Bus-Polygone / Summe Last): {flexibility:.3f}")
 
     if visualize:

@@ -172,6 +172,9 @@ def set_missing_limits(net, required_p_mw, required_q_mvar):
         if pd.isna(trafo.get('sn_mva')):
             net.trafo.at[idx, 'sn_mva'] = sn_mva
 
+    if "in_service" not in net.switch.columns:
+        net.switch["in_service"] = True  # Default-Wert für alle Switches
+
     return net
 
 def set_power_limits(df, multiplier=1.4):

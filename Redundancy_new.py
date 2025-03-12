@@ -3,7 +3,9 @@
 import itertools
 import pandapower as pp
 import networkx as nx
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
+import time
+from Redundancy import is_graph_connected
 
 # Schwellenwerte definieren
 CRITICAL_THRESHOLD = 90  # in Prozent, z. B. für Leitungen und Transformatoren
@@ -49,19 +51,30 @@ def Redundancy(net):
             print(f"  {key}: {value}")
         print("-" * 40)
 
-    element_counts = {
-        "scaled_counts": {
-            "line": len(net.line),
-            "sgen": len(net.sgen),
-            "trafo": len(net.trafo),
-            "bus": len(net.bus),
-            "storage": len(net.storage)
-        }
-    }
-
     print("\nStarte N-2-Redundanzprüfung...")
-    red_resultsb = n_2_redundancy_check(net)
+    # Liste der zu prüfenden Elementtypen
+    element_types = ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]
 
+    n2_redundancy_results = {}
+    Success = 0
+    Failed = 0
+    timeout = 300
+
+    # Über alle relevanten Elementtypen iterieren
+    for element_type in element_types:
+        start_time = time.time()
+        results = n_2_redundancy_check(net, start_time, element_type, timeout)
+        n2_redundancy_results[element_type] = results[element_type]
+
+        # Summiere die Ergebnisse
+        Success += results[element_type]['Success']
+        Failed += results[element_type]['Failed']
+        print(time.time() - start_time)
+
+    # Gesamtrate berechnen
+    total_checks = Success + Failed
+    red_resultsb  = Success / total_checks if total_checks != 0 else 0
+    
     # # Ergebnisse ausgeben
     # print("\nErgebnisse der N-2-Redundanzprüfung:")
     # for element, stats in red_resultsb.items():
@@ -77,8 +90,8 @@ def Redundancy(net):
         total=lf_resultsb["line"]["total"]
     )
     red_line = compute_red_indicator(
-        Success=red_resultsb["line"]["Success"],
-        Fail=red_resultsb["line"]["Failed"]
+        Success=n2_redundancy_results["line"]["Success"],
+        Fail=n2_redundancy_results["line"]["Failed"]
     )
     component_indicators["line"] = {
         "lf": lf_line,
@@ -93,8 +106,8 @@ def Redundancy(net):
         total=lf_resultsb["trafo"]["total"]
     )
     red_trafo = compute_red_indicator(
-        Success=red_resultsb["trafo"]["Success"],
-        Fail=red_resultsb["trafo"]["Failed"]
+        Success=n2_redundancy_results["trafo"]["Success"],
+        Fail=n2_redundancy_results["trafo"]["Failed"]
     )
     component_indicators["trafo"] = {
         "lf": lf_trafo,
@@ -110,8 +123,8 @@ def Redundancy(net):
         total=lf_resultsb["bus"]["total"]
     )
     red_bus = compute_red_indicator(
-        Success=red_resultsb["bus"]["Success"],
-        Fail=red_resultsb["bus"]["Failed"]
+        Success=n2_redundancy_results["bus"]["Success"],
+        Fail=n2_redundancy_results["bus"]["Failed"]
     )
     component_indicators["bus"] = {
         "lf": lf_bus,
@@ -124,8 +137,8 @@ def Redundancy(net):
     # sodass der kombinierte Indikator allein von der Redundanz abhängt.
     for comp in ["sgen", "storage"]:
         red_comp = compute_red_indicator(
-            Success=red_resultsb[comp]["Success"],
-            Fail=red_resultsb[comp]["Failed"]
+            Success=n2_redundancy_results[comp]["Success"],
+            Fail=n2_redundancy_results[comp]["Failed"]
         )
         component_indicators[comp] = {
             "lf": 1.0,
@@ -165,7 +178,7 @@ def Redundancy(net):
     # print(f"  N-2 Redundanz Gesamt: {overall_red:.3f}")
     # print(f"  Kombinierter Gesamtindikator: {overall_combined:.3f}")
 
-    return overall_lf, overall_red, overall_combined, component_indicators, red_resultsb
+    return overall_lf, overall_red, overall_combined, component_indicators, n2_redundancy_results
 
 
 def compute_lf_indicator(avg_loading, num_crit, total):
@@ -307,36 +320,36 @@ def analyze_components_gen(gen_data, gen_max, sgen_data=None, sgen_max=None, sto
 Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.
 """
 
-def n_2_redundancy_check(net_temp):
+def n_2_redundancy_check(net_temp, start_time, element_type, timeout):
     """Überprüft die N-2-Redundanz für verschiedene Netzkomponenten."""
-    resultsa = {
-        "line": {"Success": 0, "Failed": 0},
-        "sgen": {"Success": 0, "Failed": 0},
-        "trafo": {"Success": 0, "Failed": 0},
-        "bus": {"Success": 0, "Failed": 0},
-        "storage": {"Success": 0, "Failed": 0}
-    }
+    if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
+        raise ValueError(f"Invalid element type for n_2 redundancy: {element_type}")
+    
+    resultsa = {element_type: {"Success": 0, "Failed": 0}}
 
     # Erstelle Kombinationen von zwei Elementen pro Kategorie (N-2-Prüfung)
-    element_pairs = {
-        "line": list(itertools.combinations(net_temp.line.index, 2)) if not net_temp.line.empty else [],
-        "sgen": list(itertools.combinations(net_temp.sgen.index, 2)) if not net_temp.sgen.empty else [],
-        "trafo": list(itertools.combinations(net_temp.trafo.index, 2)) if not net_temp.trafo.empty else [],
-        "bus": list(itertools.combinations(net_temp.bus.index, 2)) if not net_temp.bus.empty else [],
-        "storage": list(itertools.combinations(net_temp.storage.index, 2)) if not net_temp.storage.empty else []
-    }
+    element_pairs = list(itertools.combinations(net_temp[element_type].index,2)) if not net_temp[element_type].empty else []
 
-    print(element_pairs)
+    # print(element_pairs)
+    should_stop_n2 = False
 
     # Parallelisierung der Netzberechnungen
-    with ThreadPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=4) as executor:
         futures = []
 
-        for element_type, pairs in element_pairs.items():
+        for pairs in element_pairs:
+            
+            if should_stop_n2:
+                break
 
-            for pair in pairs:
-                net_copy = net_temp.deepcopy()
-                futures.append(executor.submit(process_pair, element_type, pair, net_copy))
+            net_temp_n2_copy = net_temp.deepcopy()
+            futures.append(executor.submit(process_pair, element_type, pairs, net_temp_n2_copy))
+
+            # Check timeout after each task submission
+            if (time.time() - start_time) > timeout:
+                print("Timeout reached. Ending process.")
+                should_stop_n2 = True
+                break
 
         for future in futures:
             element_type, status = future.result()
@@ -387,37 +400,3 @@ def process_pair(element_type, pair, net_temp):
     except Exception as e:
         #print(f"Fehler bei {element_type} mit Paar {pair}: {e}")
         return element_type, "Failed"
-
-
-def is_graph_connected(net_temp, out_of_service_elements):
-    """Prüft, ob das Netz nach dem Ausfall noch zusammenhängend ist."""
-    G = nx.Graph()
-
-    # Knoten (Busse) hinzufügen
-    for bus in net_temp.bus.itertuples():
-        if bus.Index not in out_of_service_elements.get('bus', []):
-            G.add_node(bus.Index)
-
-    # Leitungen hinzufügen (wenn sie nicht ausgefallen sind)
-    for line in net_temp.line.itertuples():
-        if line.Index not in out_of_service_elements.get('line', []):
-            from_bus, to_bus = line.from_bus, line.to_bus
-
-            # Prüfe, ob eine Schalterverbindung existiert
-            switch_closed = any(
-                (switch.bus == from_bus and switch.element == to_bus and switch.et == 'l' and switch.closed) or
-                (switch.bus == to_bus and switch.element == from_bus and switch.et == 'l' and switch.closed)
-                for _, switch in net_temp.switch.iterrows()
-            )
-
-            # Füge Kante hinzu, wenn kein offener Schalter dazwischen ist
-            if not switch_closed:
-                G.add_edge(from_bus, to_bus)
-
-    # Transformatoren als Kanten hinzufügen
-    for trafo in net_temp.trafo.itertuples():
-        if trafo.Index not in out_of_service_elements.get('trafo', []):
-            G.add_edge(trafo.hv_bus, trafo.lv_bus)
-
-    # Prüfe, ob das Netz verbunden ist
-    return nx.is_connected(G)
