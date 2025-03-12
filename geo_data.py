@@ -26,7 +26,7 @@ def get_geodata_coordinates(net):
     return x_coords, y_coords
 
 
-def get_buses_to_disable(x_coords,y_coords, random_select):
+def get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate):
     # Compute area if we have any geodata
     if x_coords and y_coords:
         x_min, x_max = min(x_coords), max(x_coords)
@@ -150,28 +150,31 @@ def components_to_disable_dynamic(net, buses_to_disable):
         print("no components deactivated")
 
 
-
-
-if __name__ == "__main__":
-    net = pn.create_cigre_network_mv(with_der="all")
-
-    # print(net.bus_geodata)
-    # net = pn.create_cigre_network_mv(with_der=False)
-    # print(net.sgen)
-    # print(net.line)
-
-    reduction_rate = 0.01
-     # Select a region to "destroy" (either random or predefined)
-    random_select = True  # Set to False for a fixed region
-
+def geo_referenced_destruction(net, reduction_rate, random_select):
     # please note: as of today only geo_data stored in buses will be handled
     # since geo_data of the exemplary nets for this project are only stored in buses (not lines)
     # for future application the geo_data stored in lines might be added to the code
     x_coords, y_coords = get_geodata_coordinates(net)
 
 
-    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(x_coords,y_coords, random_select)
+    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate)
     plot_net(net, x_start, y_start, side_length)
     # net = components_to_disable_static(net, buses_to_disable)
     net = components_to_disable_dynamic(net, buses_to_disable)
     
+    return net
+
+
+
+
+if __name__ == "__main__":
+    net = pn.create_cigre_network_mv(with_der="all")
+
+    reduction_rate = 0.01
+     # Select a region to "destroy" (either random or predefined)
+    random_select = True  # Set to False for a fixed region
+
+    net = geo_referenced_destruction(net, reduction_rate, random_select)
+
+
+

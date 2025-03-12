@@ -3,11 +3,12 @@ import pandapower.networks as pn
 import numpy as np
 import copy 
 import matplotlib.pyplot as plt
+from geo_data import geo_referenced_destruction, get_geodata_coordinates, get_buses_to_disable, plot_net, components_to_disable_dynamic
 
 
 
 class Scenario:
-    def __init__(self, name, mode, targets, reduction_rate, random_select=True, geo_data=False):
+    def __init__(self, name, mode, targets, reduction_rate, random_select=True):
         self.name = name
         self.mode = mode
         self.targets = targets
@@ -26,18 +27,21 @@ class Scenario:
     # adapt net to scenario
     def apply_modifications(self, net): 
         for target in self.targets:
-            if target not in self.component_data:
+            if target =="n.a.":
+                print("target n.a.")
+            elif target not in self.component_data:
                 print(f"Add target {target} to target list or select different target.")
                 continue  # unknown target, continue to next iteration
 
-            df = self.component_data[target]["filter"](net)  # call component filters and get df 
-        
-            if df.empty:
-                print(f"Target {target} does not exist in net. Will be skipped")
-                continue  # if empty target --> next
+            if target in self.component_data:
+                df = self.component_data[target]["filter"](net)  # call component filters and get df 
+                if df.empty:
+                    print(f"Target {target} does not exist in net. Will be skipped")
+                    continue  # if empty target --> next
 
-            # get access to components (elements to be attacked and thei column, e.g. p_mw or "in_service")
-            element, column = self.component_data[target]["element"], self.component_data[target]["column"]
+                # get access to components (elements to be attacked and thei column, e.g. p_mw or "in_service")
+                element, column = self.component_data[target]["element"], self.component_data[target]["column"]
+
 
             # mode = types -> apply changes to all components of a type
             if self.mode == "types":  #
@@ -49,13 +53,21 @@ class Scenario:
             # mode = component -> apply changes to specific components
             elif self.mode == "components":  
                 num_to_disable = int(len(df) * self.reduction_rate)
+                # if random_select = True, select random, if False select first ones from list
                 indices = (
                     np.random.choice(df.index, size=num_to_disable, replace=False)
                     if self.random_select else df.index[:num_to_disable]
                 )
                 net[element].loc[indices, "in_service"] = False
 
-            
+            elif self.mode == "geo":
+                # net = geo_referenced_destruction(net, self.reduction_rate, self.random_select)
+                x_coords, y_coords = get_geodata_coordinates(net)
+                buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net, x_coords,y_coords, self.random_select, self.reduction_rate)
+                # plot_net(net, x_start, y_start, side_length) # plot function for visual control!
+                # net = components_to_disable_static(net, buses_to_disable)
+                net = components_to_disable_dynamic(net, buses_to_disable)
+        
         return net
 
 
@@ -81,7 +93,7 @@ def get_scenarios():
         Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
         Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate= 0.5, random_select=False),
         Scenario("sabotage_2", mode="components", targets=["trafo"], reduction_rate= 1, random_select=False),
-        Scenario("flood", mode="components", targets=["trafo"], reduction_rate= 1, random_select=False),
+        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate= 0.5, random_select=True),
         # Scenario("..., geo")
         # Add more scenarios as needed
     ]
@@ -89,12 +101,8 @@ def get_scenarios():
 
 if __name__ == "__main__":
     net = pn.create_cigre_network_mv(with_der="all")
-    # net = pn.create_cigre_network_mv(with_der=False)
-    # print(net.sgen)
-    # print(net.line)
-    # print(net.trafo)
 
-    selected_scenarios = ["sabotage"]   # einzelnes aufrufen funktioniert
+    selected_scenarios = ["flood", "hagel"]   # einzelnes aufrufen funktioniert
 
     scenarios_list = get_scenarios()
     valid_scenario_names = [scenario.name for scenario in scenarios_list]
@@ -105,7 +113,7 @@ if __name__ == "__main__":
         modified_nets = scenarios(net, selected_scenarios)
         print(f"Amount of modified nets: {len(modified_nets)}")
 
-        for name, modified_net in modified_nets:
-            print(f"Scenario {name} - Trafo Tabelle: \n {modified_net.trafo}")
+        # for name, modified_net in modified_nets:
+            # print(f"Scenario {name} - Trafo Tabelle: \n {modified_net.trafo}")
             # print(f"Scenario {name} - sgen Tabelle: \n {modified_net.sgen}")
             
