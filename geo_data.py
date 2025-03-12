@@ -2,47 +2,50 @@ import pandapower.networks as pn
 import numpy as np
 import matplotlib.pyplot as plt
 
-net = pn.create_cigre_network_mv(with_der="all")
-# print(f"net before: {net}")
 
 
+def get_geodata_coordinates(net):
+    # Lists to store all x and y coordinates
+    x_coords, y_coords = [], []
 
-share_destruction = 0.25
+    if net.bus_geodata.empty and net.line_geodata.empty:
+        raise ValueError("No geodata available in the network.")
 
-# Lists to store all x and y coordinates
-x_coords, y_coords = [], []
+    # Check if bus geodata is available
+    if not net.bus_geodata.empty:
+        print("bus geo_data available")
+        x_coords.extend(net.bus_geodata["x"])
+        y_coords.extend(net.bus_geodata["y"])
 
-# Check if bus geodata is available
-if not net.bus_geodata.empty:
-    x_coords.extend(net.bus_geodata["x"])
-    y_coords.extend(net.bus_geodata["y"])
-
-# Check if line geodata is available
-if not net.line_geodata.empty:
-    # Drop NaN values # coords: array with 3 entries, first: bus a, second: bending ponint, last: bus b
-    for coords in net.line_geodata["coords"].dropna():  
-        x_coords.extend([c[0] for c in coords])  # create list of  x values
-        y_coords.extend([c[1] for c in coords])  # create list of y values
-
-# Compute area if we have any geodata
-if x_coords and y_coords:
-    x_min, x_max = min(x_coords), max(x_coords)
-    y_min, y_max = min(y_coords), max(y_coords)
+    # Check if line geodata is available
+    if not net.line_geodata.empty:
+        print("line geo_data available")
+        # Drop NaN values # coords: array with 3 entries, first: bus a, second: bending ponint, last: bus b
+        for coords in net.line_geodata["coords"].dropna():  
+            x_coords.extend([c[0] for c in coords])  # create list of  x values
+            y_coords.extend([c[1] for c in coords])  # create list of y values
     
-    # Calculate the bounding box area
-    area = (x_max - x_min) * (y_max - y_min)
-    area_destroyed = area * share_destruction
-    side_length = np.sqrt(area_destroyed)  # Square root to get a square-like area
+    return x_coords, y_coords
 
-    print(f"Max x: {x_max}, Min x: {x_min}")
-    print(f"Max y: {y_max}, Min y: {y_min}")
-    print(f"Total network area: {area:.2f}")
-    print(f"Area to be destroyed: {area_destroyed:.2f}")
+def get_buses_to_disable(x_coords,y_coords, random_select):
+    # Compute area if we have any geodata
+    if x_coords and y_coords:
+        x_min, x_max = min(x_coords), max(x_coords)
+        y_min, y_max = min(y_coords), max(y_coords)
+        
+        # Calculate the bounding box area
+        area = (x_max - x_min) * (y_max - y_min)
+        area_destroyed = area * reduction_rate
+        side_length = np.sqrt(area_destroyed)  # Square root to get a square-like area
 
-    # Select a region to "destroy" (either random or predefined)
-    random_selection = True  # Set to False for a fixed region
+        print(f"Max x: {x_max}, Min x: {x_min}")
+        print(f"Max y: {y_max}, Min y: {y_min}")
+        print(f"Total network area: {area:.2f}")
+        print(f"Area to be destroyed: {area_destroyed:.2f}")
 
-    if random_selection:
+
+
+    if random_select:
         # Select a random x and y range
         x_start = np.random.uniform(x_min, x_max - side_length)
         x_end = x_start + side_length
@@ -50,8 +53,8 @@ if x_coords and y_coords:
         y_end = y_start + side_length
     else:
         # Fixed selection: take the bottom-left quarter of the network
-        x_start, x_end = x_min, x_min + (x_max - x_min) * np.sqrt(share_destruction)
-        y_start, y_end = y_min, y_min + (y_max - y_min) * np.sqrt(share_destruction)
+        x_start, x_end = x_min, x_min + (x_max - x_min) * np.sqrt(reduction_rate)
+        y_start, y_end = y_min, y_min + (y_max - y_min) * np.sqrt(reduction_rate)
 
     print(f"Selected region: x_start={x_start:.2f}, x_end={x_end:.2f}, y_start={y_start:.2f}, y_end={y_end:.2f}")
 
@@ -63,7 +66,10 @@ if x_coords and y_coords:
 
     print(f"Buses to be disabled: {list(buses_to_disable)}")
 
-        # Visualize the network
+    return buses_to_disable, x_start, y_start, side_length
+
+def plot_net(net, x_start, y_start, side_length):
+    # Visualize the network
     fig, ax = plt.subplots(figsize=(10, 8))
     
     # Plot bus coordinates
@@ -85,20 +91,20 @@ if x_coords and y_coords:
             ax.text(mid_x, mid_y, str(idx), fontsize=8, color='purple', ha='center', va='center')
 
 
-    # Draw the selected region as a red rectangle
-    from matplotlib.patches import Rectangle
-    rect = Rectangle((x_start, y_start), side_length, side_length, linewidth=2, edgecolor="red", facecolor="none", label="Destruction Area")
-    ax.add_patch(rect)
-    
-    ax.set_xlabel("X Coordinate")
-    ax.set_ylabel("Y Coordinate")
-    ax.set_title("Network Visualization with Destruction Area")
-    ax.legend()
-    plt.show()
+        # Draw the selected region as a red rectangle
+        from matplotlib.patches import Rectangle
+        rect = Rectangle((x_start, y_start), side_length, side_length, linewidth=2, edgecolor="red", facecolor="none", label="Destruction Area")
+        ax.add_patch(rect)
+        
+        ax.set_xlabel("X Coordinate")
+        ax.set_ylabel("Y Coordinate")
+        ax.set_title("Network Visualization with Destruction Area")
+        ax.legend()
+        plt.show()
 
 
 
-
+def components_to_disable(net, buses_to_disable):
     # Disable buses and all connected elements
     net.bus.loc[buses_to_disable, "in_service"] = False
     net.line.loc[net.line["from_bus"].isin(buses_to_disable) | 
@@ -111,10 +117,28 @@ if x_coords and y_coords:
     print("Network elements in the selected area have been disabled.")
 
     # print(f"net after: {net}")
-
-
-else:
-    print("No geodata available in the network.")
+    return net
 
 
 
+
+
+
+if __name__ == "__main__":
+    net = pn.create_cigre_network_mv(with_der="all")
+    # net = pn.create_cigre_network_mv(with_der=False)
+    # print(net.sgen)
+    # print(net.line)
+
+    reduction_rate = 0.25
+     # Select a region to "destroy" (either random or predefined)
+    random_select = True  # Set to False for a fixed region
+
+
+    x_coords, y_coords = get_geodata_coordinates(net)
+
+
+    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(x_coords,y_coords, random_select)
+    plot_net(net, x_start, y_start, side_length)
+    net = components_to_disable(net, buses_to_disable)
+    
