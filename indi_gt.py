@@ -4,7 +4,7 @@ import networkx as nx
 from initialize import add_indicator
 from networkx.algorithms import community
 
-def GraphenTheorieIndicator(Graph, dfinalresults):
+def GraphenTheorieIndicator(Graph, dfinalresults, printing= False):
 
 
     # Now calculate average shortest path length for the largest connected component
@@ -28,9 +28,10 @@ def GraphenTheorieIndicator(Graph, dfinalresults):
     # Calculate average degree centrality
     avg_degree_centrality = sum(degree_centrality.values()) / len(degree_centrality)
 
-    print(f"Degree Centrality:")
-    for node, centrality in degree_centrality.items():
-        print(f"Bus {node}: {centrality}")
+    if printing:
+        print(f"Degree Centrality:")
+        for node, centrality in degree_centrality.items():
+            print(f"Bus {node}: {centrality}")
 
     print(f"\nAverage Degree Centrality: {avg_degree_centrality}")
 

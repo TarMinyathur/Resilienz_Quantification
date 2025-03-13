@@ -32,7 +32,7 @@ def flexibility_fxor (net_flex, visualize):
     sum_q = net_flex.load["q_mvar"].sum()
 
     # 3) Vergleich ausgeben
-    flexibility = min(1 , sum_area_polygons / np.sqrt(sum_p**2 + sum_q**2))
+    flexibility = min(1 , sum_area_polygons / np.sqrt(sum_p**2 + sum_q**2)) if sum_area_polygons > 0 else 0
     print(f"Verhältnis (Summe Bus-Polygone / Summe Last): {flexibility:.3f}")
 
     if visualize:
@@ -96,17 +96,35 @@ def minkowski_sum(polyA, polyB):
 
     Returns a shapely Polygon representing polyA ⊕ polyB.
     """
-    # 1) Handle empties
+    # 1) Handle empties: Falls A oder B leer => Rückgabe B bzw. A
     if polyA.is_empty:
         return polyB
     if polyB.is_empty:
         return polyA
 
-    # 2) Ensure each is convex and in CCW orientation
+    # 2) Falls *beide* keine Polygone sind (LineString, Point, etc.), brich ab
+    if (not isinstance(polyA, Polygon) and not isinstance(polyB, Polygon)):
+        return Polygon()
+
+    # 3) polyA: falls kein Polygon => convex_hull versuchen
+    if not isinstance(polyA, Polygon):
+        polyA = polyA.convex_hull
+        # immer noch kein Polygon oder leer => Minkowski-Summe bricht ab => Rückgabe polyB
+        if polyA.is_empty or not isinstance(polyA, Polygon):
+            return polyB
+
+    # 4) polyB: falls kein Polygon => convex_hull versuchen
+    if not isinstance(polyB, Polygon):
+        polyB = polyB.convex_hull
+        # immer noch kein Polygon oder leer => Rückgabe polyA
+        if polyB.is_empty or not isinstance(polyB, Polygon):
+            return polyA
+
+    # 6) Ensure each is convex and in CCW orientation
     polyA = orient(polyA.convex_hull, sign=1.0)
     polyB = orient(polyB.convex_hull, sign=1.0)
 
-    # 3) Extract coordinates (excluding repeated last point)
+    # 7) Extract coordinates (excluding repeated last point)
     coordsA = list(polyA.exterior.coords)[:-1]
     coordsB = list(polyB.exterior.coords)[:-1]
     lenA = len(coordsA)
@@ -144,7 +162,7 @@ def minkowski_sum(polyA, polyB):
     def next_idx(i, length):
         return (i + 1) % length
 
-    # 4) "Walk" around both polygons
+    # 8) "Walk" around both polygons
     steps = 0
     while steps < (lenA + lenB):
         iA_next = next_idx(iA, lenA)

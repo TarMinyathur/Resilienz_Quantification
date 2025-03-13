@@ -8,62 +8,14 @@ from initialize import add_indicator
 def calculate_flexibility(net_flex):
 
     dflexresults = pd.DataFrame(columns=['Indicator', 'Value'])
-    flex1 = calculate_flexibility_monte(net_flex)
-    dflexresults = add_indicator(dflexresults, 'Flex Monte Carlo', flex1)
     flex2 = calculate_net_flexwork_reserve(net_flex)
     dflexresults = add_indicator(dflexresults, 'Flex Netzreserve', flex2)
-    flex3 = calculate_opf_success_rate(net_flex)
-    dflexresults = add_indicator(dflexresults, 'Flex Erfolgreiche OPP', flex3)
     flex4 = calculate_loadflow_reserve(net_flex)
     dflexresults = add_indicator(dflexresults, 'Flex Reserve krit Leitungen', flex4)
-
-    flex_index= (flex1 + flex2 + flex3 + flex4) / 4
+    flex_index= (flex2 + flex4) / 2
     dflexresults = add_indicator(dflexresults, 'Flexibilität Gesamt', flex_index)
 
     return dflexresults
-
-
-def calculate_flexibility_monte(net_flexa):
-    """ Berechnet den normierten Flexibilitätsindex zwischen 0 und 1. """
-
-    # net_flexa, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net_flexa)
-    # net_flexa = set_missing_limits(net_flexa, required_p_mw, required_q_mvar)
-
-    # Anzahl Monte-Carlo-Simulationen
-    N = 5
-    variation_percent = 0.1  # +/-10% Variation
-
-    flex_index_values = []
-    orig_load_p = net_flexa.load.p_mw.copy()
-    orig_sgen_p = net_flexa.sgen.p_mw.copy()
-
-    # Berechnung der maximalen externen Einspeisung als Normierungsbasis
-    max_ext_grid_power = np.abs(net_flexa.ext_grid["max_p_mw"].sum()) if not net_flexa.ext_grid.empty else 1e-6
-
-    for _ in range(N):
-        # Zufällige Variation von Lasten & Einspeisungen
-        net_flexa.load.p_mw = orig_load_p * (1 + np.random.uniform(-variation_percent, variation_percent, size=len(orig_load_p)))
-        net_flexa.sgen.p_mw = orig_sgen_p * (1 + np.random.uniform(-variation_percent, variation_percent, size=len(orig_sgen_p)))
-
-        # OPF durchführen
-        try:
-            runopp(net_flexa)
-        except:
-            print("no")
-            continue  # Falls OPF nicht konvergiert, überspringen
-
-        # Berechnung der Gesamtscheinleistung (Netzbelastung)
-        s_total = np.sqrt(net_flexa.res_bus.p_mw ** 2 + net_flexa.res_bus.q_mvar ** 2).sum()
-        flex_index_values.append(s_total)
-
-    # Mittelwert der Flexibilität berechnen
-    flexi_index = np.sum(flex_index_values) / N
-
-    # Normierung der Flexibilität auf den Bereich [0,1]
-    flexi_index_norm = max(0, min(1, 1 - (flexi_index / max_ext_grid_power)))
-
-    return flexi_index_norm
-
 
 def calculate_net_flexwork_reserve(net_flexb):
     """ Berechnet_flex den Anteil der ungenutzten Kapazität im net_flexz. """
@@ -82,28 +34,6 @@ def calculate_net_flexwork_reserve(net_flexb):
         flexibility_index = 0  # Falls keine Kapazitätswerte vorhanden sind
 
     return flexibility_index
-
-def calculate_opf_success_rate(net_flexc, N=100, variation_percent=0.1):
-    """ Simuliert N verschiedene Lastszenarien und berechnet_flex die Erfolgsrate der OPF-Lösung. """
-    successful_cases = 0
-
-    orig_load_p = net_flexc.load.p_mw.copy()
-    orig_sgen_p = net_flexc.sgen.p_mw.copy()
-
-    for _ in range(N):
-        # Zufällige Variation der Lasten & Einspeisungen
-        net_flexc.load.p_mw = np.maximum(0, orig_load_p * (1 + np.random.uniform(-variation_percent, variation_percent, len(orig_load_p))))
-        net_flexc.sgen.p_mw = np.maximum(0, orig_sgen_p * (1 + np.random.uniform(-variation_percent, variation_percent, len(orig_sgen_p))))
-
-        try:
-            pp.runopp(net_flexc)
-            successful_cases += 1  # OPF erfolgreich
-        except:
-            continue  # OPF fehlgeschlagen, ignoriere dieses Szenario
-
-    # Erfolgsrate berechnen
-    success_rate = successful_cases / N
-    return success_rate
 
 def calculate_loadflow_reserve(net_flexd):
     """ Berechnet_flex den durchschnittlichen freien Kapazitätsanteil auf kritischen Leitungen. """

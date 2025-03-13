@@ -1,7 +1,7 @@
 # GenerationFactors.py
 import pandas as pd
 
-def calculate_generation_factors(net,Studie):
+def calculate_generation_factors(net_temp_GF,Studie):
     # Initialize generation factors
     generation_factors = {}
 
@@ -18,14 +18,14 @@ def calculate_generation_factors(net,Studie):
 
     df = pd.DataFrame(data)
 
-    generation_factors = umrechnung_fuer_studie(df, Studie, net)
+    generation_factors = umrechnung_fuer_studie(df, Studie, net_temp_GF)
 
     return generation_factors
 
-def umrechnung_fuer_studie(daf, studie, net):
+def umrechnung_fuer_studie(daf, studie, net_temp_GF):
     # Calculate for static generators (sgen)
-    sgen_types = net.sgen['type'].unique()
-    gen_types = net.storage['type'].unique()
+    sgen_types = net_temp_GF.sgen['type'].unique()
+    gen_types = net_temp_GF.storage['type'].unique()
     generation_factors = {}
 
     # Auswahl der Studie
@@ -61,7 +61,7 @@ def umrechnung_fuer_studie(daf, studie, net):
                 volllaststunden["Kernkraft"]) else 0
 
     # Umrechnung für Batteriespeicher und Wasserkraft
-    for idx, row in net.storage.iterrows():
+    for idx, row in net_temp_GF.storage.iterrows():
         if row['type'] == 'Battery':
             capacity = row['sn_mva']
             p_mw = row['p_mw']

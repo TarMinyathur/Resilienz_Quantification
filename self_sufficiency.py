@@ -102,12 +102,12 @@ def selfsuff(net_temp_selfsuff, gen_factor, show_self_sufficiency_at_bus):
     selfsuff = float(erfolg) / (float(erfolg) + float(misserfolg))
     return float(selfsuff)
 
-def selfsufficiency_neu(grid, reduction_factor=0.95, verbose=True, min_threshold=0.01):
+def selfsufficiency_neu(net_temp_selfsuff_2, reduction_factor=0.95, verbose=True, min_threshold=0.01):
     """
     Testet, bis zu welchem Grad die Netzgrenzen reduziert werden können, bevor OPF nicht mehr konvergiert.
 
     Parameter:
-    - grid: pandapower Netz
+    - net_temp_selfsuff_2: pandapower Netz
     - reduction_factor: Pro Schritt Reduktion der Netzgrenzen (Standard: 95% der vorherigen Werte)
     - verbose: Gibt aus, wie lange die OPF-Berechnung dauert (Standard: True)
 
@@ -115,7 +115,7 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, verbose=True, min_threshold
     - Ein Wert: Maximaler Reduktionsfaktor, bei dem noch Konvergenz erreicht wird
     """
     # Originalwerte speichern
-    original_ext_grid = grid.ext_grid.copy()
+    original_ext_net = net_temp_selfsuff_2.ext_grid.copy()
     current_reduction = 1.0  # Start bei 100%
 
     while True:
@@ -126,7 +126,7 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, verbose=True, min_threshold
 
             # OPF ausführen
             pp.runopp(
-                grid,
+                net_temp_selfsuff_2,
                 init="pf",
                 calculate_voltage_angles=True,
                 enforce_q_lims=True,
@@ -139,16 +139,16 @@ def selfsufficiency_neu(grid, reduction_factor=0.95, verbose=True, min_threshold
                 print(f"OPF konvergiert in {duration:.4f} Sekunden.")
 
             # Netzgrenzen weiter reduzieren
-            grid.ext_grid.loc[:, 'max_p_mw'] *= reduction_factor
-            grid.ext_grid.loc[:, 'max_q_mvar'] *= reduction_factor
-            grid.ext_grid.loc[:, 'min_p_mw'] *= reduction_factor
-            grid.ext_grid.loc[:, 'min_q_mvar'] *= reduction_factor
+            net_temp_selfsuff_2.ext_grid.loc[:, 'max_p_mw'] *= reduction_factor
+            net_temp_selfsuff_2.ext_grid.loc[:, 'max_q_mvar'] *= reduction_factor
+            net_temp_selfsuff_2.ext_grid.loc[:, 'min_p_mw'] *= reduction_factor
+            net_temp_selfsuff_2.ext_grid.loc[:, 'min_q_mvar'] *= reduction_factor
 
             # Reduktionsfaktor aktualisieren
             current_reduction *= reduction_factor
 
             # Überprüfen, ob min_threshold erreicht wurde
-            if (grid.ext_grid['max_p_mw'] < min_threshold * original_ext_grid['max_p_mw']).any():
+            if (net_temp_selfsuff_2.ext_grid['max_p_mw'] < min_threshold * original_ext_net['max_p_mw']).any():
                 print("Minimale Netzgrenzen erreicht.")
                 break
 

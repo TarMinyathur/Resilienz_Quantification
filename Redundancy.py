@@ -13,19 +13,21 @@ import random
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
 def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout):
-
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type: {element_type}")
 
     results = {element_type: {"Success": 0, "Failed": 0}}
 
-    # Create combinations of three elements for the given type
-    element_triples = list(itertools.combinations(net_temp_red[element_type].index,3)) if not net_temp_red[element_type].empty else []
+    # If the table for this element type is empty or has fewer than 3 rows, no combinations can be made
+    if net_temp_red[element_type].empty or len(net_temp_red[element_type].index) < 3:
+        return results
 
-    random.shuffle(element_triples)
+    # Extract indices and shuffle them to achieve a pseudo-random iteration of combinations
+    index_list = list(net_temp_red[element_type].index)
+    random.shuffle(index_list)
 
-    # print(element_type)
-    # print(element_triples)
+    # Create a combinations generator instead of a full list
+    element_triples_gen = itertools.combinations(index_list, 3)
 
     should_stop = False
 
@@ -33,7 +35,7 @@ def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout):
     with ProcessPoolExecutor(max_workers=4) as executor:
         futures = []
 
-        for triple in element_triples:
+        for triple in element_triples_gen:
             if should_stop:
                 break
 
@@ -46,9 +48,10 @@ def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout):
                 should_stop = True
                 break
 
+        # Collect results
         for future in futures:
-            element_type, status = future.result()
-            results[element_type][status] += 1
+            element_type_returned, status = future.result()
+            results[element_type_returned][status] += 1
 
     return results
 

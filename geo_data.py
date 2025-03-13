@@ -5,28 +5,28 @@ import pandas as pd
 
 
 
-def get_geodata_coordinates(net):
+def get_geodata_coordinates(net_temp_geo):
     # Lists to store all x and y coordinates
     x_coords, y_coords = [], []
 
-    if net.bus_geodata.empty and net.line_geodata.empty:
-        raise ValueError("No geodata available in the network.")
+    if net_temp_geo.bus_geodata.empty and net_temp_geo.line_geodata.empty:
+        raise ValueError("No geodata available in the net.")
         
 
     # Check if bus geodata is available
-    if not net.bus_geodata.empty:
+    if not net_temp_geo.bus_geodata.empty:
         print("bus geo_data available")
-        x_coords.extend(net.bus_geodata["x"])
-        y_coords.extend(net.bus_geodata["y"])
+        x_coords.extend(net_temp_geo.bus_geodata["x"])
+        y_coords.extend(net_temp_geo.bus_geodata["y"])
 
     # handling geo data in lines available, not covered in code
-    if not net.line_geodata.empty:
+    if not net_temp_geo.line_geodata.empty:
         raise ValueError("geo_data in lines. Not covered in code. Either pick different net or extend code")
 
     return x_coords, y_coords
 
 
-def get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate):
+def get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reduction_rate):
     # Compute area if we have any geodata
     if x_coords and y_coords:
         x_min, x_max = min(x_coords), max(x_coords)
@@ -37,7 +37,7 @@ def get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate):
         area_destroyed = area * reduction_rate
         side_length = np.sqrt(area_destroyed)  # Square root to get a square-like area
        
-        print(f"Total network area: {area:.2f}")
+        print(f"Total net area: {area:.2f}")
         print(f"Area to be destroyed: {area_destroyed:.2f}")
 
     if random_select:
@@ -45,7 +45,7 @@ def get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate):
         x_start = np.random.uniform(x_min, x_max - side_length)
         y_start = np.random.uniform(y_min, y_max - side_length)
     else:
-        # Fixed selection: take the bottom-left quarter of the network
+        # Fixed selection: take the bottom-left quarter of the net_temp_geowork
         x_start = x_min
         y_start = y_min
 
@@ -54,9 +54,9 @@ def get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate):
 
 
     # Find buses within the selected destruction area (both x and y ranges)
-    buses_to_disable = net.bus_geodata[
-        (net.bus_geodata["x"] >= x_start) & (net.bus_geodata["x"] <= x_end) &
-        (net.bus_geodata["y"] >= y_start) & (net.bus_geodata["y"] <= y_end)
+    buses_to_disable = net_temp_geo.bus_geodata[
+        (net_temp_geo.bus_geodata["x"] >= x_start) & (net_temp_geo.bus_geodata["x"] <= x_end) &
+        (net_temp_geo.bus_geodata["y"] >= y_start) & (net_temp_geo.bus_geodata["y"] <= y_end)
     ].index
 
     print(f"Buses to be disabled: {list(buses_to_disable)}")
@@ -64,14 +64,14 @@ def get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate):
     return buses_to_disable, x_start, y_start, side_length
 
 
-def plot_net(net, x_start, y_start, side_length):
-    # Visualize the network
+def plot_net(net_temp_geo, x_start, y_start, side_length):
+    # Visualize the net_temp_geowork
     fig, ax = plt.subplots(figsize=(10, 8))
     
     # Plot bus coordinates
-    if not net.bus_geodata.empty:
-        ax.scatter(net.bus_geodata["x"], net.bus_geodata["y"], c="blue", s=50, label="Buses")
-        for idx, row in net.bus_geodata.iterrows():
+    if not net_temp_geo.bus_geodata.empty:
+        ax.scatter(net_temp_geo.bus_geodata["x"], net_temp_geo.bus_geodata["y"], c="blue", s=50, label="Buses")
+        for idx, row in net_temp_geo.bus_geodata.iterrows():
             ax.text(row["x"], row["y"], str(idx), fontsize=9, color='black', ha='right', va='bottom')
 
 
@@ -82,35 +82,35 @@ def plot_net(net, x_start, y_start, side_length):
         ax.set_aspect('equal')      # to guarantee axis equality
         ax.set_xlabel("X Coordinate")
         ax.set_ylabel("Y Coordinate")
-        ax.set_title("Network Visualization with Destruction Area")
+        ax.set_title("net Visualization with Destruction Area")
         ax.legend()
         plt.show()
 
 
 
-def components_to_disable_static(net, buses_to_disable):
+def components_to_disable_static(net_temp_geo, buses_to_disable):
     # 1 step: disables the bus(es) itself
-    # net.bus.loc[buses_to_disable, "in_service"] = False
+    # net_temp_geo.bus.loc[buses_to_disable, "in_service"] = False
 
     # Disable buses and all connected elements
     #  1 step: disables the bus(es) itself
-    net.bus.loc[buses_to_disable, "in_service"] = False
+    net_temp_geo.bus.loc[buses_to_disable, "in_service"] = False
 
     # 2 step
-    net.line.loc[net.line["from_bus"].isin(buses_to_disable) | 
-                    net.line["to_bus"].isin(buses_to_disable), "in_service"] = False
-    net.trafo.loc[net.trafo["hv_bus"].isin(buses_to_disable) | 
-                    net.trafo["lv_bus"].isin(buses_to_disable), "in_service"] = False
-    net.load.loc[net.load["bus"].isin(buses_to_disable), "in_service"] = False
-    net.sgen.loc[net.sgen["bus"].isin(buses_to_disable), "in_service"] = False
+    net_temp_geo.line.loc[net_temp_geo.line["from_bus"].isin(buses_to_disable) | 
+                    net_temp_geo.line["to_bus"].isin(buses_to_disable), "in_service"] = False
+    net_temp_geo.trafo.loc[net_temp_geo.trafo["hv_bus"].isin(buses_to_disable) | 
+                    net_temp_geo.trafo["lv_bus"].isin(buses_to_disable), "in_service"] = False
+    net_temp_geo.load.loc[net_temp_geo.load["bus"].isin(buses_to_disable), "in_service"] = False
+    net_temp_geo.sgen.loc[net_temp_geo.sgen["bus"].isin(buses_to_disable), "in_service"] = False
     # ... further components to be added
-    print("Network elements in the selected area have been disabled.")
+    print("net elements in the selected area have been disabled.")
 
-    # print(f"net after: {net}")
-    return net
+    # print(f"net_temp_geo after: {net_temp_geo}")
+    return net_temp_geo
 
 
-def components_to_disable_dynamic(net, buses_to_disable):
+def components_to_disable_dynamic(net_temp_geo, buses_to_disable):
         # Liste der Komponenten mit den zu überprüfenden Bus-Spalten
     bus_columns = {
         'load': ['bus'],
@@ -130,14 +130,14 @@ def components_to_disable_dynamic(net, buses_to_disable):
     deactivated_components = {}  # Speichert deaktivierte Komponenten für die Ausgabe
 
     for comp, cols in bus_columns.items():
-        if comp in net and not net[comp].empty:
-            mask = pd.Series(False, index=net[comp].index)  # Startet mit False für alle Zeilen
+        if comp in net_temp_geo and not net_temp_geo[comp].empty:
+            mask = pd.Series(False, index=net_temp_geo[comp].index)  # Startet mit False für alle Zeilen
             for col in cols:
-                if col in net[comp].columns:
-                    mask |= net[comp][col].isin(buses_to_disable)
+                if col in net_temp_geo[comp].columns:
+                    mask |= net_temp_geo[comp][col].isin(buses_to_disable)
 
             if mask.any():
-                net[comp].loc[mask, "in_service"] = False
+                net_temp_geo[comp].loc[mask, "in_service"] = False
                 deactivated_components[comp] = mask.sum()  # Speichert Anzahl der deaktivierten Elemente
 
 
@@ -150,31 +150,31 @@ def components_to_disable_dynamic(net, buses_to_disable):
         print("no components deactivated")
 
 
-def geo_referenced_destruction(net, reduction_rate, random_select):
+def geo_referenced_destruction(net_temp_geo, reduction_rate, random_select):
     # please note: as of today only geo_data stored in buses will be handled
-    # since geo_data of the exemplary nets for this project are only stored in buses (not lines)
+    # since geo_data of the exemplary net_temp_geos for this project are only stored in buses (not lines)
     # for future application the geo_data stored in lines might be added to the code
-    x_coords, y_coords = get_geodata_coordinates(net)
+    x_coords, y_coords = get_geodata_coordinates(net_temp_geo)
 
 
-    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net, x_coords,y_coords, random_select, reduction_rate)
-    plot_net(net, x_start, y_start, side_length)
-    # net = components_to_disable_static(net, buses_to_disable)
-    net = components_to_disable_dynamic(net, buses_to_disable)
+    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reduction_rate)
+    plot_net_temp_geo(net_temp_geo, x_start, y_start, side_length)
+    # net_temp_geo = components_to_disable_static(net_temp_geo, buses_to_disable)
+    net_temp_geo = components_to_disable_dynamic(net_temp_geo, buses_to_disable)
     
-    return net
+    return net_temp_geo
 
 
 
 
 if __name__ == "__main__":
-    net = pn.create_cigre_network_mv(with_der="all")
+    net_temp_geo = pn.create_cigre_net_temp_geowork_mv(with_der="all")
 
     reduction_rate = 0.3
      # Select a region to "destroy" (either random or predefined)
     random_select = True  # Set to False for a fixed region
 
-    net = geo_referenced_destruction(net, reduction_rate, random_select)
+    net_temp_geo = geo_referenced_destruction(net_temp_geo, reduction_rate, random_select)
 
 
 

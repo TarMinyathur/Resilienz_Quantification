@@ -6,6 +6,7 @@ import networkx as nx
 from concurrent.futures import ProcessPoolExecutor
 import time
 from Redundancy import is_graph_connected
+import random
 
 # Schwellenwerte definieren
 CRITICAL_THRESHOLD = 90  # in Prozent, z. B. für Leitungen und Transformatoren
@@ -20,28 +21,28 @@ Lastfluss und Redundanz werden dabei gleich gewichtet; im Lastfluss fließen sow
 als auch der Anteil kritischer Elemente ein.
 """
 
-def Redundancy(net):
+def Redundancy(net_temp_red3):
     # # Beispielnetz erstellen (IEEE 9-Bus-System)
-    # net = pn.create_cigre_network_mv("all")
-    # net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-    # net = set_missing_limits(net, required_p_mw, required_q_mvar)
+    # net_temp_red3 = pn.create_cigre_network_mv("all")
+    # net_temp_red3, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
+    # net_temp_red3 = set_missing_limits(net, required_p_mw, required_q_mvar)
 
     # Lastflussberechnung durchführen
-    pp.runpp(net)
+    pp.runpp(net_temp_red3)
 
     print("\nLastflussanalyse:")
 
     # Ergebnisse in lf_resultsb speichern:
     lf_resultsb = {}
     # Auswertung der Auslastungen:
-    lf_resultsb["line"] = analyze_loading(net.res_line[['loading_percent']], "Leitungen")
-    lf_resultsb["trafo"] = analyze_loading(net.res_trafo[['loading_percent']], "Transformatoren")
+    lf_resultsb["line"] = analyze_loading(net_temp_red3.res_line[['loading_percent']], "Leitungen")
+    lf_resultsb["trafo"] = analyze_loading(net_temp_red3.res_trafo[['loading_percent']], "Transformatoren")
 
     # Busspannungsauswertung:
-    lf_resultsb["bus"] = analyze_buses(net.res_bus[['vm_pu']])
+    lf_resultsb["bus"] = analyze_buses(net_temp_red3.res_bus[['vm_pu']])
 
-    # Erzeugeranalyse (Generator-Pmax aus net.gen):
-    lf_resultsb["gen"] = analyze_components_gen(net.res_gen[['p_mw']], net.gen[['max_p_mw']], net.sgen[['p_mw']], net.sgen[['max_p_mw']], net.storage[['p_mw']], net.storage[['max_p_mw']])
+    # Erzeugeranalyse (Generator-Pmax aus net_temp_red3.gen):
+    lf_resultsb["gen"] = analyze_components_gen(net_temp_red3.res_gen[['p_mw']], net_temp_red3.gen[['max_p_mw']], net_temp_red3.sgen[['p_mw']], net_temp_red3.sgen[['max_p_mw']], net_temp_red3.storage[['p_mw']], net_temp_red3.storage[['max_p_mw']])
 
     # Ordentliche, formatierte Ausgabe:
     print("Ergebnisse der Lastflussanalyse:\n" + "-" * 40)
@@ -63,7 +64,7 @@ def Redundancy(net):
     # Über alle relevanten Elementtypen iterieren
     for element_type in element_types:
         start_time = time.time()
-        results = n_2_redundancy_check(net, start_time, element_type, timeout)
+        results = n_2_redundancy_check(net_temp_red3, start_time, element_type, timeout)
         n2_redundancy_results[element_type] = results[element_type]
 
         # Summiere die Ergebnisse
@@ -320,25 +321,32 @@ def analyze_components_gen(gen_data, gen_max, sgen_data=None, sgen_max=None, sto
 Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.
 """
 
+
 def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout):
     """Überprüft die N-2-Redundanz für verschiedene Netzkomponenten."""
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type for n_2 redundancy: {element_type}")
-    
+
     resultsa = {element_type: {"Success": 0, "Failed": 0}}
 
-    # Erstelle Kombinationen von zwei Elementen pro Kategorie (N-2-Prüfung)
-    element_pairs = list(itertools.combinations(net_temp_red2[element_type].index,2)) if not net_temp_red2[element_type].empty else []
+    # Early return if there are fewer than 2 elements
+    if net_temp_red2[element_type].empty or len(net_temp_red2[element_type].index) < 2:
+        return resultsa
 
-    # print(element_pairs)
+    # Extract the indices and shuffle them if you want random pairs
+    index_list = list(net_temp_red2[element_type].index)
+    random.shuffle(index_list)
+
+    # Create a generator for all 2-element combinations
+    element_pairs_gen = itertools.combinations(index_list, 2)
+
     should_stop_n2 = False
 
     # Parallelisierung der Netzberechnungen
     with ProcessPoolExecutor(max_workers=4) as executor:
         futures = []
 
-        for pairs in element_pairs:
-            
+        for pairs in element_pairs_gen:
             if should_stop_n2:
                 break
 
@@ -352,8 +360,8 @@ def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout):
                 break
 
         for future in futures:
-            element_type, status = future.result()
-            resultsa[element_type][status] += 1
+            element_type_returned, status = future.result()
+            resultsa[element_type_returned][status] += 1
 
     return resultsa
 

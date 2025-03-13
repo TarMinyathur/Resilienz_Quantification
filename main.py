@@ -76,37 +76,37 @@ def increase_generation(net, factor):
 
 # Configuration
 basic = {
-    "Grid": "create_cigre_network_mv_all",  # Change this to select the grid
+    "Grid": "case118",  # Change this to select the grid
     "Adjustments": True,
-    "Overview_Grid": False
+    "Overview_Grid": True
 }
 
 selected_indicators = {
     "all": False,
-    "self_sufficiency": False,
+    "self_sufficiency": True,
     "show_self_sufficiency_at_bus": False,
-    "system_self_sufficiency": False,
-    "generation_shannon_evenness": False,
-    "generation_variety": False,
-    "line_shannon_evenness": False,
-    "line_variety": False,
-    "load_shannon_evenness": False,
-    "load_variety": False,
-    "disparity_generators": False,
-    "disparity_load": False,
-    "disparity_trafo": False,
-    "disparity_lines": False,
-    "n_3_redundancy": False,
-    "n_3_redundancy_print": False,
-    "Redundancy": False,
-    "GraphenTheorie": False,
-    "Flexibility": False,
-    "Flexibility_fxor": False,
-    "Buffer": False,
+    "system_self_sufficiency": True,
+    "generation_shannon_evenness": True,
+    "generation_variety": True,
+    "line_shannon_evenness": True,
+    "line_variety": True,
+    "load_shannon_evenness": True,
+    "load_variety": True,
+    "disparity_generators": True,
+    "disparity_load": True,
+    "disparity_trafo": True,
+    "disparity_lines": True,
+    "n_3_redundancy": True,
+    "n_3_redundancy_print": True,
+    "Redundancy": True,
+    "GraphenTheorie": True,
+    "Flexibility": True,
+    "Flexibility_fxor": True,
+    "Buffer": True,
     "show_spider_plot": False,
-    "print_results": False,
+    "print_results": True,
     "output_excel": False,
-    "stress_scenario": True
+    "stress_scenario": False
 }
 
 # Main Function
@@ -125,23 +125,22 @@ def main():
         # Count elements and scaled elements
         element_counts = count_elements(net)
         # Print both counts in one row
-        print(net)
+        # print(net)
         print("Voltage Limits:")
 
         print("External Grid Settings:")
         print(net.ext_grid)
 
-        print("Generators:")
-        print(net.gen)
-        print(net.sgen)
-        print(net.storage)
+        # print("Generators:")
+        # print(net.gen)
+        # print(net.sgen)
+        # print(net.storage)
 
-        print("Element Type | Original Count | Scaled Count (* 0.15)")
-        print("-" * 45)
+        print("Element Type    | Original Count |")
+        print("-" * 20)
         for element_type in element_counts["original_counts"]:
             original_count = element_counts["original_counts"][element_type]
-            scaled_count = element_counts["scaled_counts"][element_type]
-            print(f"{element_type.capitalize():<12} | {original_count:<14} | {scaled_count:<20}")
+            print(f"{element_type.capitalize():<12}    | {original_count:<12} ")
 
     if basic["Adjustments"]:
         net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
@@ -156,12 +155,12 @@ def main():
     if selected_indicators["self_sufficiency"]:
         # Calculate generation factors
         generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
-        #print(f"{generation_factors}")
         indi_selfsuff = float(selfsuff(net,generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
         dfinalresults = add_indicator(dfinalresults, 'self sufficiency at bus level', indi_selfsuff)
 
     if selected_indicators["system_self_sufficiency"]:
-        indi_selfsuff_neu = selfsufficiency_neu(net)
+        netsa = net.deepcopy()
+        indi_selfsuff_neu = selfsufficiency_neu(netsa)
         dfinalresults = add_indicator(dfinalresults, 'System Self Sufficiency', indi_selfsuff_neu)
 
     if selected_indicators["generation_shannon_evenness"] or selected_indicators["line_shannon_evenness"] or selected_indicators["load_shannon_evenness"]:
@@ -305,7 +304,7 @@ def main():
         n3_redundancy_results = {}
         Success = 0
         Failed = 0
-        timeout = 300
+        timeout = 180
 
         # Über alle relevanten Elementtypen iterieren
         for element_type in element_types:
@@ -353,9 +352,7 @@ def main():
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)
-        dfinalresults = add_indicator(dfinalresults, 'Flex Monte Carlo', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Monte Carlo', 'Value'].values[0])
         dfinalresults = add_indicator(dfinalresults, 'Flex Netzreserve', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flex Erfolgreiche OPP', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Erfolgreiche OPP', 'Value'].values[0])
         dfinalresults = add_indicator(dfinalresults, 'Flex Reserve krit Leitungen', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
         dfinalresults = add_indicator(dfinalresults, 'Flexibilität Gesamt', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
 
@@ -364,7 +361,7 @@ def main():
         dfinalresults = add_indicator(dfinalresults, 'Buffer Capacity', Speicher)
 
     if selected_indicators["Flexibility_fxor"]:
-        Flex_fxor = flexibility_fxor(net, True)
+        Flex_fxor = flexibility_fxor(net, False)
         dfinalresults = add_indicator(dfinalresults, 'Feasible operating region', Flex_fxor)
 
     if selected_indicators["n_3_redundancy_print"]:
