@@ -3,7 +3,7 @@ import pandapower.networks as pn
 import numpy as np
 import copy 
 import matplotlib.pyplot as plt
-from geo_data import geo_referenced_destruction, get_geodata_coordinates, get_buses_to_disable, plot_net, components_to_disable_dynamic
+from geo_data import get_geodata_coordinates, get_buses_to_disable, plot_net, components_to_disable_dynamic
 
 
 
@@ -27,7 +27,7 @@ class Scenario:
     # adapt net to scenario
     def apply_modifications(self, net): 
         for target in self.targets:
-            if target =="n.a.":
+            if target =="n.a.":    # for mode = "geo"
                 print("target n.a.")
             elif target not in self.component_data:
                 print(f"Add target {target} to target list or select different target.")

@@ -170,7 +170,7 @@ def geo_referenced_destruction(net, reduction_rate, random_select):
 if __name__ == "__main__":
     net = pn.create_cigre_network_mv(with_der="all")
 
-    reduction_rate = 0.01
+    reduction_rate = 0.3
      # Select a region to "destroy" (either random or predefined)
     random_select = True  # Set to False for a fixed region
 
