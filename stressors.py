@@ -92,21 +92,13 @@ def get_scenarios():
         Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.0),
         Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
         Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate= 0.5, random_select=False),
-        Scenario("sabotage_2", mode="components", targets=["trafo"], reduction_rate= 1, random_select=False),
         Scenario("flood", mode="geo", targets=["n.a."], reduction_rate= 0.5, random_select=True),
-        # Scenario("..., geo")
         # Add more scenarios as needed
     ]
 
 
-
-
-
-
-if __name__ == "__main__":
-    net = pn.create_cigre_network_mv(with_der="all")
-
-    selected_scenarios = ["flood", "hagel"]   # einzelnes aufrufen funktioniert
+def stress_scenarios(net, selected_scenarios):
+    # selected_scenarios = ["flood", "hagel"]   # einzelnes aufrufen funktioniert
 
     scenarios_list = get_scenarios()
     valid_scenario_names = [scenario.name for scenario in scenarios_list]
@@ -120,4 +112,12 @@ if __name__ == "__main__":
         # for name, modified_net in modified_nets:
             # print(f"Scenario {name} - Trafo Tabelle: \n {modified_net.trafo}")
             # print(f"Scenario {name} - sgen Tabelle: \n {modified_net.sgen}")
-            
+    return modified_nets
+
+
+
+if __name__ == "__main__":
+    net = pn.create_cigre_network_mv(with_der="all")
+    net_stress = stress_scenarios(net)
+
+    
