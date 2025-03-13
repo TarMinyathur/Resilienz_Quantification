@@ -24,6 +24,8 @@ from self_sufficiency import selfsufficiency_neu
 from flexibility import calculate_flexibility
 from buffer import calculate_buffer
 from fxor import flexibility_fxor
+from stressors import stress_scenarios
+
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
@@ -94,16 +96,17 @@ selected_indicators = {
     "disparity_load": False,
     "disparity_trafo": False,
     "disparity_lines": False,
-    "n_3_redundancy": True,
-    "n_3_redundancy_print": True,
-    "Redundancy":True,
-    "GraphenTheorie": True,
+    "n_3_redundancy": False,
+    "n_3_redundancy_print": False,
+    "Redundancy": False,
+    "GraphenTheorie": False,
     "Flexibility": False,
     "Flexibility_fxor": False,
     "Buffer": False,
     "show_spider_plot": False,
-    "print_results": True,
-    "output_excel": False
+    "print_results": False,
+    "output_excel": False,
+    "stress_scenario": True
 }
 
 # Main Function
@@ -367,13 +370,21 @@ def main():
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")
         for element_type, counts in n3_redundancy_results.items():
-            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
+            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")    
     if selected_indicators["show_spider_plot"]:
         plot_spider_chart(dfinalresults)
     if selected_indicators["print_results"]:
         print(dfinalresults)
     if selected_indicators["output_excel"]:
         dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
+    
+    if selected_indicators["stress_scenario"]:
+        
+        selected_scenarios = ["flood"]   # einzelnes aufrufen funktioniert
+
+        modified_nets = stress_scenarios(net, selected_scenarios)
+
+        return modified_nets
 
 if __name__ == '__main__':
     main()
