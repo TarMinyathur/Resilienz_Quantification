@@ -320,7 +320,7 @@ def analyze_components_gen(gen_data, gen_max, sgen_data=None, sgen_max=None, sto
 Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.
 """
 
-def n_2_redundancy_check(net_temp, start_time, element_type, timeout):
+def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout):
     """Überprüft die N-2-Redundanz für verschiedene Netzkomponenten."""
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type for n_2 redundancy: {element_type}")
@@ -328,7 +328,7 @@ def n_2_redundancy_check(net_temp, start_time, element_type, timeout):
     resultsa = {element_type: {"Success": 0, "Failed": 0}}
 
     # Erstelle Kombinationen von zwei Elementen pro Kategorie (N-2-Prüfung)
-    element_pairs = list(itertools.combinations(net_temp[element_type].index,2)) if not net_temp[element_type].empty else []
+    element_pairs = list(itertools.combinations(net_temp_red2[element_type].index,2)) if not net_temp_red2[element_type].empty else []
 
     # print(element_pairs)
     should_stop_n2 = False
@@ -342,8 +342,8 @@ def n_2_redundancy_check(net_temp, start_time, element_type, timeout):
             if should_stop_n2:
                 break
 
-            net_temp_n2_copy = net_temp.deepcopy()
-            futures.append(executor.submit(process_pair, element_type, pairs, net_temp_n2_copy))
+            net_temp_red2_n2_copy = net_temp_red2.deepcopy()
+            futures.append(executor.submit(process_pair, element_type, pairs, net_temp_red2_n2_copy))
 
             # Check timeout after each task submission
             if (time.time() - start_time) > timeout:
@@ -358,21 +358,21 @@ def n_2_redundancy_check(net_temp, start_time, element_type, timeout):
     return resultsa
 
 
-def process_pair(element_type, pair, net_temp):
+def process_pair(element_type, pair, net_temp_red2):
     """Setzt zwei Elemente außer Betrieb und überprüft die Netzstabilität."""
     for element_id in pair:
-        net_temp[element_type].at[element_id, 'in_service'] = False
+        net_temp_red2[element_type].at[element_id, 'in_service'] = False
 
     out_of_service_elements = {element_type: pair}
 
     # Prüfe, ob das Netz nach dem Ausfall noch verbunden ist
-    if not is_graph_connected(net_temp, out_of_service_elements):
+    if not is_graph_connected(net_temp_red2, out_of_service_elements):
         return element_type, "Failed"
 
     # Versuche eine Lastflussberechnung
     try:
         pp.runopp(
-            net_temp,
+            net_temp_red2,
             init="pf",
             calculate_voltage_angles=True,
             enforce_q_lims=True,
@@ -384,7 +384,7 @@ def process_pair(element_type, pair, net_temp):
         #print(f"OPF mit init='pf' für {element_type} fehlgeschlagen, versuche init='flat'")
         try:
             pp.runopp(
-                net_temp,
+                net_temp_red2,
                 init="flat",
                 calculate_voltage_angles=True,
                 enforce_q_lims=True,

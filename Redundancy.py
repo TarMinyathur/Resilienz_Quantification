@@ -12,7 +12,7 @@ import random
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
-def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
+def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout):
 
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type: {element_type}")
@@ -20,7 +20,7 @@ def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
     results = {element_type: {"Success": 0, "Failed": 0}}
 
     # Create combinations of three elements for the given type
-    element_triples = list(itertools.combinations(net_temp[element_type].index,3)) if not net_temp[element_type].empty else []
+    element_triples = list(itertools.combinations(net_temp_red[element_type].index,3)) if not net_temp_red[element_type].empty else []
 
     random.shuffle(element_triples)
 
@@ -37,8 +37,8 @@ def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
             if should_stop:
                 break
 
-            net_temp_copy = net_temp.deepcopy()
-            futures.append(executor.submit(process_triple, element_type, triple, net_temp_copy))
+            net_temp_red_copy = net_temp_red.deepcopy()
+            futures.append(executor.submit(process_triple, element_type, triple, net_temp_red_copy))
 
             # Check timeout after each task submission
             if (time.time() - start_time) > timeout:
@@ -54,21 +54,21 @@ def n_3_redundancy_check(net_temp, start_time, element_type, timeout):
 
 
 # Function to process each triple and update results
-def process_triple(element_type, triple, net_temp):
+def process_triple(element_type, triple, net_temp_red):
     # Set the elements out of service
     for element_id in triple:
-        net_temp[element_type].at[element_id, 'in_service'] = False
+        net_temp_red[element_type].at[element_id, 'in_service'] = False
 
     # Check if the grid is still connected
     out_of_service_elements = {element_type: triple}
-    if not is_graph_connected(net_temp, out_of_service_elements):
+    if not is_graph_connected(net_temp_red, out_of_service_elements):
         return element_type, "Failed"
 
     # Run the load flow calculation
     try:
         # First attempt with init="pf"
         pp.runopp(
-            net_temp,
+            net_temp_red,
             init="pf",
             calculate_voltage_angles=True,  # Compute voltage angles
             enforce_q_lims=True,  # Enforce reactive power (Q) limits
@@ -81,7 +81,7 @@ def process_triple(element_type, triple, net_temp):
         try:
             # Retry with init="flat"
             pp.runopp(
-                net_temp,
+                net_temp_red,
                 init="flat",
                 calculate_voltage_angles=True,  # Compute voltage angles
                 enforce_q_lims=True,  # Enforce reactive power (Q) limits
@@ -99,7 +99,7 @@ def process_triple(element_type, triple, net_temp):
         return element_type, "Failed"
 
 
-def is_graph_connected(net_temp, out_of_service_elements):
+def is_graph_connected(net_temp_red, out_of_service_elements):
     """
     Prüft, ob das Netz nach dem Rausnehmen bestimmter Elemente (bspw. n-3-Fälle) noch zusammenhängend ist.
     out_of_service_elements ist ein Dictionary, z.B. {"line": [2, 5], "bus": [3], ...}.
@@ -110,14 +110,14 @@ def is_graph_connected(net_temp, out_of_service_elements):
 
     # 1) Buses hinzufügen
     #    Nur die Busse, die als in_service=True gelten UND nicht in out_of_service_elements['bus'] stehen
-    for bus_id, bus in net_temp.bus.iterrows():
+    for bus_id, bus in net_temp_red.bus.iterrows():
         if bus.in_service and bus_id not in out_of_service_elements.get('bus', []):
             G.add_node(bus_id)
 
     # 2) Lines hinzufügen
     #    Auch hier schauen wir, ob die Leitung in_service=True ist und nicht in out_of_service_elements['line'] steht.
     #    Zusätzlich prüfen wir, ob eventuell ein Switch zwischen den Bussen liegt und geschlossen/in Service ist.
-    for line_id, line in net_temp.line.iterrows():
+    for line_id, line in net_temp_red.line.iterrows():
         if line.in_service and line_id not in out_of_service_elements.get('line', []):
             from_bus = line.from_bus
             to_bus = line.to_bus
@@ -131,7 +131,7 @@ def is_graph_connected(net_temp, out_of_service_elements):
             switch_exists = False
             switch_closed = True
 
-            for sw_id, sw in net_temp.switch.iterrows():
+            for sw_id, sw in net_temp_red.switch.iterrows():
                 if sw.et == 'l':
                     # Ein Switch koppelt dieselben Busse? (bus == from_bus, element == to_bus) oder umgekehrt
                     if ((sw.bus == from_bus and sw.element == to_bus) or
@@ -152,7 +152,7 @@ def is_graph_connected(net_temp, out_of_service_elements):
                 G.add_edge(from_bus, to_bus)
 
     # 3) Trafos hinzufügen (analog zu Lines)
-    for trafo_id, trafo in net_temp.trafo.iterrows():
+    for trafo_id, trafo in net_temp_red.trafo.iterrows():
         if trafo.in_service and trafo_id not in out_of_service_elements.get('trafo', []):
             hv_bus = trafo.hv_bus
             lv_bus = trafo.lv_bus

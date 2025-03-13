@@ -8,24 +8,24 @@ import numpy as np
 import time
 
 
-def selfsuff(net_temp, gen_factor, show_self_sufficiency_at_bus):
+def selfsuff(net_temp_selfsuff, gen_factor, show_self_sufficiency_at_bus):
     """
     Berechnet die Eigenversorgung eines Stromnetzes effizienter durch Vektorisierung und optimierte Berechnungen.
     Berücksichtigt dabei die gesicherten Erzeugungswerte anhand der Faktoren in gen_factor, inklusive Batterien.
 
     Parameter:
-        net_temp (pandapowerNet): Das Netzobjekt mit den Informationen zu Erzeugern, Lasten und Speichern.
+        net_temp_selfsuff (pandapowerNet): Das Netzobjekt mit den Informationen zu Erzeugern, Lasten und Speichern.
         gen_factor (dict): Ein Dictionary mit Faktoren für die gesicherten Erzeugungswerte der verschiedenen Erzeugungstechnologien.
     """
     erfolg = 0
     misserfolg = 0
 
     # Vektorisierte Berechnung für jeden Bus
-    for bus in net_temp.bus.index:
+    for bus in net_temp_selfsuff.bus.index:
         # Gesicherte Erzeugungsleistung für gen und sgen berechnen
-        gen_bus = net_temp.gen[net_temp.gen.bus == bus]
-        sgen_bus = net_temp.sgen[net_temp.sgen.bus == bus]
-        storage_bus = net_temp.storage[net_temp.storage.bus == bus]
+        gen_bus = net_temp_selfsuff.gen[net_temp_selfsuff.gen.bus == bus]
+        sgen_bus = net_temp_selfsuff.sgen[net_temp_selfsuff.sgen.bus == bus]
+        storage_bus = net_temp_selfsuff.storage[net_temp_selfsuff.storage.bus == bus]
 
         # Gesicherte Leistung für gen
         gen_p = 0
@@ -77,7 +77,7 @@ def selfsuff(net_temp, gen_factor, show_self_sufficiency_at_bus):
         generation_s = np.sqrt(generation_p**2 + generation_q**2)  # Konsistente Berechnung
 
         # Lasten berechnen
-        load_bus = net_temp.load[net_temp.load.bus == bus]
+        load_bus = net_temp_selfsuff.load[net_temp_selfsuff.load.bus == bus]
         demand_p = load_bus.p_mw.sum()
         demand_q = load_bus.q_mvar.sum()
         demand_s = np.sqrt((load_bus.p_mw ** 2 + load_bus.q_mvar ** 2)).sum()
