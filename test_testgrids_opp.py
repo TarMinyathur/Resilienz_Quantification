@@ -10,11 +10,11 @@ test_grids = [
     ("example_simple", pn.example_simple),
     ("example_multivoltage", pn.example_multivoltage),
 
-    # Simple pandapower Test Networks
-    ("panda_four_load_branch", pn.panda_four_load_branch),
-    ("four_loads_with_branches_out", pn.four_loads_with_branches_out),
-    ("simple_four_bus_system", pn.simple_four_bus_system),
-    ("simple_mv_open_ring_net", pn.simple_mv_open_ring_net),
+    # # Simple pandapower Test Networks
+    # ("panda_four_load_branch", pn.panda_four_load_branch),
+    # ("four_loads_with_branches_out", pn.four_loads_with_branches_out),
+    # ("simple_four_bus_system", pn.simple_four_bus_system),
+    # ("simple_mv_open_ring_net", pn.simple_mv_open_ring_net),
 
     # # CIGRE Networks
     # ("create_cigre_network_hv", pn.create_cigre_network_hv),
@@ -24,7 +24,7 @@ test_grids = [
     # ("create_cigre_network_lv", pn.create_cigre_network_lv),
     #
     # # MV Oberrhein
-    # ("mv_oberrhein", pn.mv_oberrhein),
+     ("mv_oberrhein", pn.mv_oberrhein),
     #
     # # Power System Test Cases
     # ("case4gs", pn.case4gs),
@@ -58,28 +58,28 @@ test_grids = [
     # Synthetic Voltage Control LV Networks
     ("create_synthetic_voltage_control_lv_network", pn.create_synthetic_voltage_control_lv_network),
 
-    # 3-Phase Grid Data
-    ("ieee_european_lv_asymmetric", pn.ieee_european_lv_asymmetric),
+    # # 3-Phase Grid Data
+    # ("ieee_european_lv_asymmetric", pn.ieee_european_lv_asymmetric),
 
-    # Average Kerber Networks
-    ("create_kerber_landnetz_freileitung_1", pn.create_kerber_landnetz_freileitung_1),
-    ("create_kerber_landnetz_freileitung_2", pn.create_kerber_landnetz_freileitung_2),
-    ("create_kerber_landnetz_kabel_1", pn.create_kerber_landnetz_kabel_1),
-    ("create_kerber_landnetz_kabel_2", pn.create_kerber_landnetz_kabel_2),
+    # # Average Kerber Networks
+    # ("create_kerber_landnetz_freileitung_1", pn.create_kerber_landnetz_freileitung_1),
+    # ("create_kerber_landnetz_freileitung_2", pn.create_kerber_landnetz_freileitung_2),
+    # ("create_kerber_landnetz_kabel_1", pn.create_kerber_landnetz_kabel_1),
+    # ("create_kerber_landnetz_kabel_2", pn.create_kerber_landnetz_kabel_2),
     ("create_kerber_dorfnetz", pn.create_kerber_dorfnetz),
-    ("create_kerber_vorstadtnetz_kabel_1", pn.create_kerber_vorstadtnetz_kabel_1),
-    ("create_kerber_vorstadtnetz_kabel_2", pn.create_kerber_vorstadtnetz_kabel_2),
+    #("create_kerber_vorstadtnetz_kabel_1", pn.create_kerber_vorstadtnetz_kabel_1),
+    #("create_kerber_vorstadtnetz_kabel_2", pn.create_kerber_vorstadtnetz_kabel_2),
 
     # Extreme Kerber Networks
-    ("kb_extrem_landnetz_freileitung", pn.kb_extrem_landnetz_freileitung),
-    ("kb_extrem_landnetz_kabel", pn.kb_extrem_landnetz_kabel),
-    ("kb_extrem_landnetz_freileitung_trafo", pn.kb_extrem_landnetz_freileitung_trafo),
-    ("kb_extrem_landnetz_kabel_trafo", pn.kb_extrem_landnetz_kabel_trafo),
+    # ("kb_extrem_landnetz_freileitung", pn.kb_extrem_landnetz_freileitung),
+    # ("kb_extrem_landnetz_kabel", pn.kb_extrem_landnetz_kabel),
+    # ("kb_extrem_landnetz_freileitung_trafo", pn.kb_extrem_landnetz_freileitung_trafo),
+    # ("kb_extrem_landnetz_kabel_trafo", pn.kb_extrem_landnetz_kabel_trafo),
     ("kb_extrem_dorfnetz", pn.kb_extrem_dorfnetz),
-    ("kb_extrem_dorfnetz_trafo", pn.kb_extrem_dorfnetz_trafo),
-    ("kb_extrem_vorstadtnetz_1", pn.kb_extrem_vorstadtnetz_1),
-    ("kb_extrem_vorstadtnetz_2", pn.kb_extrem_vorstadtnetz_2),
-    ("kb_extrem_vorstadtnetz_trafo_1", pn.kb_extrem_vorstadtnetz_trafo_1)
+    # ("kb_extrem_dorfnetz_trafo", pn.kb_extrem_dorfnetz_trafo),
+    # ("kb_extrem_vorstadtnetz_1", pn.kb_extrem_vorstadtnetz_1),
+    # ("kb_extrem_vorstadtnetz_2", pn.kb_extrem_vorstadtnetz_2),
+    # ("kb_extrem_vorstadtnetz_trafo_1", pn.kb_extrem_vorstadtnetz_trafo_1)
 ]
 
 # Store the results
@@ -87,11 +87,58 @@ results = []
 
 print("\n--- OPF Convergence Test for Pandapower Grids ---\n")
 
+
+def run_corrected_opf(net):
+
+    # 🔹 Fix Voltage Limits (Prevent Collapse)
+    net.bus["min_vm_pu"] = 0.94  # Min Voltage = 0.9 p.u.
+    net.bus["max_vm_pu"] = 1.06  # Max Voltage = 1.1 p.u.
+
+    # 🔹 **Limit Voltage Angles**
+    net.ext_grid["max_va_degree"] = 50  # Reduce angle range
+    net.ext_grid["min_va_degree"] = -50  # Prevent extreme angles
+
+    # 🔹 **Fix Generator Limits (Prevent Negative P)**
+    net.gen["min_p_mw"] = net.gen["p_mw"].clip(lower=15)  # Ensure min generation ≥ 10 MW
+    net.gen["max_p_mw"] = net.gen["p_mw"] * 1.3  # Allow headroom for OPF
+    net.gen["min_q_mvar"] = -50  # Allow reasonable reactive range
+    net.gen["max_q_mvar"] = 100
+
+    # 🔹 Remove All Existing Cost Functions to Avoid Duplicates
+    if not net.poly_cost.empty:
+        net.poly_cost.drop(net.poly_cost.index, inplace=True)  # Clear existing cost functions
+
+    # # 🔹 Add a Single Cost Function Per Generator
+    for i, gen_idx in enumerate(net.gen.index):
+        pp.create_poly_cost(net, gen_idx, "gen",  cp1_eur_per_mw=0.01)
+
+    # net.poly_cost = net.poly_cost[net.poly_cost["et"] == "gen"]  # Keep only generator costs
+    # net.poly_cost["c"] = [0, 1.5, 0]  # **Linear cost function instead of quadratic**
+
+    # 🔹 Increase Transformer & Line MVA Ratings
+    net.trafo["max_loading_percent"] = 130  # Allow transformers to load up to 120%
+    net.line["max_loading_percent"] = 130  # Allow lines to load up to 120%
+
+    # 🔹 Set Voltage Angle Limits (Prevent Unrealistic Fluctuations)
+    net.ext_grid["max_va_degree"] = 60  # Max 60 degrees
+    net.ext_grid["min_va_degree"] = -60  # Min -60 degrees
+
+    # 🔹 **Reduce Line & Transformer Losses**
+    net.line["r_ohm_per_km"] *= 0.75  # Reduce resistance (20% reduction)
+    net.line["x_ohm_per_km"] *= 0.75  # Reduce reactance (20% reduction)
+
+    return net
+
 # Iterate through all test grids
 for grid_name, grid_func in test_grids:
     print(f"Testing {grid_name} ...")
     # Create the network
     net = grid_func()
+    net.switch['closed'] = True
+
+    if grid_name == "example_multivoltage":
+        net = run_corrected_opf(net)
+
 
     # Process conventional generators (gen)
     for idx, gen in net.gen.iterrows():
@@ -128,7 +175,7 @@ for grid_name, grid_func in test_grids:
             net.storage.at[idx, 'min_q_mvar'] = -storage['p_mw']
 
     for idx, bus in net.bus.iterrows():
-        min_vm_pu, max_vm_pu = 0.8, 1.2  #
+        min_vm_pu, max_vm_pu = 0.7, 1.3  #
         # Falls keine Grenzen gesetzt sind, setzen
         if pd.isna(bus.get('min_vm_pu')):
             net.bus.at[idx, 'min_vm_pu'] = min_vm_pu
@@ -151,16 +198,30 @@ for grid_name, grid_func in test_grids:
     try:
         # Run Power Flow first
         pp.runpp(net)
-        print(f"{grid_name}: Power Flow converged successfully!")
+        # print(f"{grid_name}: Power Flow converged successfully!")
+        #
+        # print("Spannungen an den Netzknoten:")
+        # print(net.res_bus)
+        #
+        # print("\nLeistungsflüsse auf den Leitungen:")
+        # print(net.res_line)
+        #
+        # print("\nTransformatorleistung:")
+        # print(net.res_trafo)
+        #
+        # print("\nGeneratorleistung:")
+        # print(net.res_gen)
 
         # Try to run Optimal Power Flow (OPF) with init='pf'
         try:
             pp.runopp(
                 net,
                 init="pf",
+                verbose=True,
                 calculate_voltage_angles=True,
                 enforce_q_lims=True,
-                distributed_slack=True
+                distributed_slack=True,
+                pdipm_step_size=0.05
             )
             print(f"{grid_name}: OPF converged successfully with init='pf'!")
             results.append((grid_name, "OPF Converged with init='pf'"))

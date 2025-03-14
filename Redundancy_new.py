@@ -136,6 +136,7 @@ def Redundancy(net_temp_red3):
     # sgen und storage besitzen in unserem Beispiel keine Lastflussdaten.
     # Daher verwenden wir für den Lastflussindikator hier default-mäßig 1 (optimal),
     # sodass der kombinierte Indikator allein von der Redundanz abhängt.
+
     for comp in ["sgen", "storage"]:
         red_comp = compute_red_indicator(
             Success=n2_redundancy_results[comp]["Success"],

@@ -76,7 +76,7 @@ def increase_generation(net, factor):
 
 # Configuration
 basic = {
-    "Grid": "case118",  # Change this to select the grid
+    "Grid": "mv_all_high5",  # Change this to select the grid
     "Adjustments": True,
     "Overview_Grid": True
 }
@@ -105,7 +105,7 @@ selected_indicators = {
     "Buffer": True,
     "show_spider_plot": False,
     "print_results": True,
-    "output_excel": False,
+    "output_excel": True,
     "stress_scenario": False
 }
 
@@ -114,6 +114,8 @@ def main():
 
     dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
+
+    dfinalresults = add_indicator(dfinalresults, basic["Grid"] , 0)
 
     # Select and create the grid dynamically
     if basic["Grid"] in grids:
@@ -373,8 +375,8 @@ def main():
     if selected_indicators["print_results"]:
         print(dfinalresults)
     if selected_indicators["output_excel"]:
-        dfinalresults.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
-    
+        dfinalresults.T.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
+
     if selected_indicators["stress_scenario"]:
         
         selected_scenarios = ["flood"]   # einzelnes aufrufen funktioniert
