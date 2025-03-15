@@ -25,6 +25,7 @@ from flexibility import calculate_flexibility
 from buffer import calculate_buffer
 from fxor import flexibility_fxor
 from stressors import stress_scenarios
+from Evaluate_scenario import run_scenario
 
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
@@ -76,7 +77,7 @@ def increase_generation(net, factor):
 
 # Configuration
 basic = {
-    "Grid": "mv_all_high5",  # Change this to select the grid
+    "Grid": "create_cigre_network_mv_all",  # Change this to select the grid
     "Adjustments": True,
     "Overview_Grid": True
 }
@@ -85,28 +86,45 @@ selected_indicators = {
     "all": False,
     "self_sufficiency": True,
     "show_self_sufficiency_at_bus": False,
-    "system_self_sufficiency": True,
-    "generation_shannon_evenness": True,
-    "generation_variety": True,
-    "line_shannon_evenness": True,
-    "line_variety": True,
-    "load_shannon_evenness": True,
-    "load_variety": True,
-    "disparity_generators": True,
-    "disparity_load": True,
-    "disparity_trafo": True,
-    "disparity_lines": True,
-    "n_3_redundancy": True,
-    "n_3_redundancy_print": True,
-    "Redundancy": True,
+    "system_self_sufficiency": False,
+    "generation_shannon_evenness": False,
+    "generation_variety": False,
+    "line_shannon_evenness": False,
+    "line_variety": False,
+    "load_shannon_evenness": False,
+    "load_variety": False,
+    "disparity_generators": False,
+    "disparity_load": False,
+    "disparity_trafo": False,
+    "disparity_lines": False,
+    "n_3_redundancy": False,
+    "n_3_redundancy_print": False,
+    "Redundancy": False,
     "GraphenTheorie": True,
     "Flexibility": True,
     "Flexibility_fxor": True,
-    "Buffer": True,
+    "Buffer": False,
     "show_spider_plot": False,
     "print_results": True,
-    "output_excel": True,
-    "stress_scenario": False
+    "output_excel": False
+}
+
+selected_scenario = {
+    "stress_scenario": True,
+    "all": False,
+    "Flood": True,
+    "Earthquake": False,
+    "Dunkelflaute": True,
+    "Storm": False,
+    "Fire": False,
+    "Line Overload": False,
+    "IT-ransomware attack": False,
+    "Geopolitical": False,
+    "High EE generation": False,
+    "High Load": False,
+    "print_results": True,
+    "output_excel": True
+
 }
 
 # Main Function
@@ -373,17 +391,36 @@ def main():
     if selected_indicators["show_spider_plot"]:
         plot_spider_chart(dfinalresults)
     if selected_indicators["print_results"]:
+        print("Results for Indicators:")
         print(dfinalresults)
     if selected_indicators["output_excel"]:
-        dfinalresults.T.to_excel("dfinalresults.xlsx", sheet_name="Results", index=False)
+        dfinalresults.T.to_excel("dfinalresults.xlsx", sheet_name="Results Indicator", index=False)
 
-    if selected_indicators["stress_scenario"]:
-        
-        selected_scenarios = ["flood"]   # einzelnes aufrufen funktioniert
+    if selected_scenario["stress_scenario"]:
 
-        modified_nets = stress_scenarios(net, selected_scenarios)
+        if selected_scenario["all"]:
+            # Setze alle anderen Indikatoren auf True
+            for key in selected_scenario:
+                if key != "all":  # 'all' selbst bleibt unverändert
+                    selected_scenario[key] = True
 
-        return modified_nets
+        dfresultsscenario = pd.DataFrame()
+        dfresultsscenario = add_indicator(dfresultsscenario, basic["Grid"], 0)
+
+        for scenario in ["Flood", "Earthquake", "Dunkelflaute", "Storm", "Fire", "Line Overload",
+                             "IT-ransomware attack", "Geopolitical", "High EE generation", "High Load"]:
+            if selected_scenario[scenario]:
+                stressor = scenario.lower()
+                modified_nets = stress_scenarios(net, stressor)
+                res_scenario = run_scenario(modified_nets, scenario)
+                dfresultsscenario = add_indicator(dfresultsscenario, scenario, res_scenario)
+
+        if not dfresultsscenario.empty:
+            if selected_scenario["print_results"]:
+                print(dfresultsscenario)
+
+            if selected_scenario["output_excel"]:
+                dfresultsscenario.to_excel("dfresultsscenario.xlsx", sheet_name="Results Scenario", index=False)
 
 if __name__ == '__main__':
     main()

@@ -73,7 +73,6 @@ class Scenario:
 
 def scenarios(net_temp_stress, selected_scenarios):
     scenarios_list = get_scenarios()
-    modified_net_temp_stresss = []
 
     for scenario in scenarios_list:
         if scenario.name in selected_scenarios:
@@ -99,6 +98,7 @@ def get_scenarios():
 
 def stress_scenarios(net_temp_stress, selected_scenarios):
     # selected_scenarios = ["flood", "hagel"]   # einzelnes aufrufen funktioniert
+    modified_net_temp_stresss = []
 
     scenarios_list = get_scenarios()
     valid_scenario_names = [scenario.name for scenario in scenarios_list]
