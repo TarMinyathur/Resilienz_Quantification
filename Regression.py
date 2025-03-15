@@ -5,116 +5,79 @@ import matplotlib.pyplot as plt
 # ----------------------------
 # 1) Excel-Dateien einlesen
 # ----------------------------
-df_indikatoren = pd.read_excel("C:\Users\runte\Dropbox\Zwischenablage\Ergebnisse_Indikatoren_final.xlsx")
-df_stress = pd.read_excel("C:\Users\runte\Dropbox\Zwischenablage\Ergebnisse_Stressoren_final.xlsx")
-
-# Beispielhafte Struktur:
-# df_indikatoren: Spalten = ["Netz", "Ind1", "Ind2", "Ind3", ...]
-# df_stress:      Spalten = ["Netz", "Stress1", "Stress2", "Stress3", ...]
+df_indikatoren = pd.read_excel(r"C:\Users\runte\Dropbox\Zwischenablage\Ergebnisse_Indikatoren_final.xlsx")
+df_szenarien = pd.read_excel(r"C:\Users\runte\Dropbox\Zwischenablage\Ergebnisse_Stressoren_final.xlsx")
 
 # ----------------------------------------------
 # 2) Mergen über gemeinsame Spalte "Netz"
 # ----------------------------------------------
-df_merged = pd.merge(df_indikatoren, df_stress, on="Netz", how="inner")
+df_merged = pd.merge(df_indikatoren, df_szenarien, on="Netz", how="inner")
 
-# Identifiziere Indikator-Spalten und Stressor-Spalten
-indikator_spalten = [col for col in df_indikatoren.columns if col != "Netz"]
-stress_spalten = [col for col in df_stress.columns if col != "Netz"]
+# Leere Strings oder fehlerhafte Werte als NaN setzen
+df_merged.replace(["", " "], pd.NA, inplace=True)
+
+# Alle Spalten außer "Netz" in numerische Werte umwandeln
+for col in df_merged.columns:
+    if col != "Netz":
+        df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce')  # Ungültige Werte zu NaN umwandeln
+
+# Fehlende Werte mit Spaltenmittelwert auffüllen
+if df_merged.isnull().values.any():
+    print("Warnung: Fehlende Werte gefunden. Ersetze mit Spaltenmittelwerten.")
+    df_merged.fillna(df_merged.mean(numeric_only=True), inplace=True)
+
+# Indikatoren- und Szenarien-Spalten identifizieren
+indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]
+szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
 
 # -----------------------------------
-# 3) Regression pro Stress-Szenario
+# 3) Regression für jedes Szenario
 # -----------------------------------
-# Dictionary zum Speichern der Ergebnisse
-ergebnisse_stress = {}
+ergebnisse_szenarien = {}
 
-for stress_col in stress_spalten:
-    # Unabhängige Variablen (X) und abhängige Variable (y)
-    X = df_merged[indikator_spalten]
-    y = df_merged[stress_col]
+for szenario in szenarien_spalten:
+    X = df_merged[indikatoren_spalten]  # Indikatoren als unabhängige Variablen
+    y = df_merged[szenario]  # Szenario als abhängige Variable
 
-    # Konstanten-Term (Intercept) hinzufügen (statsmodels macht das nicht automatisch)
+    # Falls Szenario nur NaN oder konstante Werte enthält, Regression überspringen
+    if y.isnull().all():
+        print(f"Überspringe Regression für {szenario} (nur NaN-Werte).")
+        continue
+    if y.nunique() == 1:
+        print(f"Überspringe Regression für {szenario} (nur konstante Werte).")
+        continue
+
+    # Konstanten-Term (Intercept) hinzufügen
     X_ols = sm.add_constant(X)
 
     # OLS-Modell anpassen
     model_ols = sm.OLS(y, X_ols).fit()
 
-    # In einem Dictionary speichern, falls wir später nochmal darauf zugreifen wollen
-    ergebnisse_stress[stress_col] = model_ols
+    # Ergebnisse speichern
+    ergebnisse_szenarien[szenario] = model_ols
 
-    # Konsolenausgabe: Modell-Zusammenfassung (mit p-Werten, t-Tests etc.)
+    # Konsolenausgabe der Ergebnisse
     print("=" * 70)
-    print(f"Regressionsergebnisse für Stress-Szenario: {stress_col}")
+    print(f"Regressionsergebnisse für Szenario: {szenario}")
     print(model_ols.summary())
 
-    # 3a) Visualisierung: Koeffizienten + Konfidenzintervalle
-    # -------------------------------------------------------
-    params = model_ols.params  # Geschätzte Koeffizienten (inkl. Intercept)
-    conf = model_ols.conf_int()  # Konfidenzintervalle
-    # conf ist DataFrame mit zwei Spalten (unteres / oberes KI)
-
-    # Für das Balkendiagramm lassen wir den Intercept weg (optional),
-    # da er oft nicht so relevant für die Interpretation ist.
-    # Du kannst ihn natürlich auch drin lassen.
-    params_no_intercept = params.drop('const')
-    conf_no_intercept = conf.drop('const')
-
-    # Index (Indikatoren-Namen) und Werte
-    ind_names = params_no_intercept.index
-    coef_vals = params_no_intercept.values
-
-    # KI-Abstände (nach unten und oben)
-    # z.B. yerr erfordert "Fehler" in beide Richtungen
-    lower_error = coef_vals - conf_no_intercept[0]
-    upper_error = conf_no_intercept[1] - coef_vals
-
-    # Erstelle Balkendiagramm
-    plt.figure()  # Neues Figure-Fenster
-    plt.bar(range(len(ind_names)), coef_vals,
-            yerr=[lower_error, upper_error],
-            capsize=5)
-    plt.xticks(range(len(ind_names)), ind_names, rotation=45, ha="right")
-    plt.title(f"Koeffizienten und 95%-KI: {stress_col}")
-    plt.xlabel("Indikatoren")
-    plt.ylabel("Regressionskoeffizient")
-    plt.tight_layout()
-    plt.show()
-
 # ------------------------------------------------------------------------
-# 4) Aggregierter Score (Mittelwert) über alle Stress-Szenarien bilden
+# 4) Aggregierter Szenario-Score berechnen
 # ------------------------------------------------------------------------
-df_merged["Score_alle_Stressoren"] = df_merged[stress_spalten].mean(axis=1)
+df_merged["Gesamt_Szenario_Score"] = df_merged[szenarien_spalten].mean(axis=1)
 
-# Regression für den neuen Score
-X_score = df_merged[indikator_spalten]
-y_score = df_merged["Score_alle_Stressoren"]
+# Regression für den aggregierten Score
+X_score = df_merged[indikatoren_spalten]
+y_score = df_merged["Gesamt_Szenario_Score"]
 
-X_score_ols = sm.add_constant(X_score)
-model_score = sm.OLS(y_score, X_score_ols).fit()
-
-print("=" * 70)
-print("Regressionsergebnisse für aggregierten Score über alle Stress-Szenarien")
-print(model_score.summary())
-
-# 4a) Visualisierung (Bar-Plot für Score)
-params_score = model_score.params
-conf_score = model_score.conf_int()
-
-params_score_no_intercept = params_score.drop('const')
-conf_score_no_intercept = conf_score.drop('const')
-
-ind_names = params_score_no_intercept.index
-coef_vals = params_score_no_intercept.values
-
-lower_error = coef_vals - conf_score_no_intercept[0]
-upper_error = conf_score_no_intercept[1] - coef_vals
-
-plt.figure()
-plt.bar(range(len(ind_names)), coef_vals,
-        yerr=[lower_error, upper_error],
-        capsize=5)
-plt.xticks(range(len(ind_names)), ind_names, rotation=45, ha="right")
-plt.title("Koeffizienten und 95%-KI: Aggregierter Score")
-plt.xlabel("Indikatoren")
-plt.ylabel("Regressionskoeffizient")
-plt.tight_layout()
-plt.show()
+# Falls aggregierter Score NaN oder konstant ist, Regression überspringen
+if y_score.isnull().all():
+    print("Überspringe Regression für aggregierten Szenario-Score (nur NaN-Werte).")
+elif y_score.nunique() == 1:
+    print("Überspringe Regression für aggregierten Szenario-Score (nur konstante Werte).")
+else:
+    X_score_ols = sm.add_constant(X_score)
+    model_score = sm.OLS(y_score, X_score_ols).fit()
+    print("=" * 70)
+    print("Regressionsergebnisse für aggregierten Szenario-Score")
+    print(model_score.summary())

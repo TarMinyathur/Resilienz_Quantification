@@ -411,16 +411,22 @@ def main():
                              "IT-ransomware attack", "Geopolitical", "High EE generation", "High Load"]:
             if selected_scenario[scenario]:
                 stressor = scenario.lower()
-                modified_nets = stress_scenarios(net, stressor)
+                modified_nets = stress_scenarios(net, [stressor])
                 res_scenario = run_scenario(modified_nets, scenario)
                 dfresultsscenario = add_indicator(dfresultsscenario, scenario, res_scenario)
 
         if not dfresultsscenario.empty:
+            # Compute the average of all values excluding the first row
+            if len(dfresultsscenario) > 1:  # Ensure there are enough rows to calculate an average
+                scenario_average_value = dfresultsscenario["Value"].iloc[1:].mean()  # Exclude the first row
+
+            # Add the average as a new row
+            dfresultsscenario = add_indicator(dfresultsscenario, "Overall Scenario Resilience Score", scenario_average_value)
             if selected_scenario["print_results"]:
                 print(dfresultsscenario)
 
             if selected_scenario["output_excel"]:
-                dfresultsscenario.to_excel("dfresultsscenario.xlsx", sheet_name="Results Scenario", index=False)
+                dfresultsscenario.T.to_excel("dfresultsscenario.xlsx", sheet_name="Results Scenario", index=False)
 
 if __name__ == '__main__':
     main()

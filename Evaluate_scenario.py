@@ -5,8 +5,10 @@ import concurrent.futures
 def run_scenario(modified_grids, scenario):
     results = {scenario: {"Success": 0, "Failed": 0}}
 
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {executor.submit(process_scenario, modified_grids[index]): index for index in modified_grids}
+        # Unpack name and grid correctly from modified_grids
+        futures = {executor.submit(process_scenario, grid): name for name, grid in modified_grids}
 
         # Collect results
         for future in concurrent.futures.as_completed(futures):
