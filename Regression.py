@@ -1,83 +1,98 @@
 import pandas as pd
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+import os
 
-# ----------------------------
-# 1) Excel-Dateien einlesen
-# ----------------------------
-df_indikatoren = pd.read_excel(r"C:\Users\runte\Dropbox\Zwischenablage\Ergebnisse_Indikatoren_final.xlsx")
-df_szenarien = pd.read_excel(r"C:\Users\runte\Dropbox\Zwischenablage\Ergebnisse_Stressoren_final.xlsx")
+def lade_daten(indikatoren_path, szenarien_path):
+    df_indikatoren = pd.read_excel(indikatoren_path)
+    df_szenarien = pd.read_excel(szenarien_path)
+    return df_indikatoren, df_szenarien
 
-# ----------------------------------------------
-# 2) Mergen über gemeinsame Spalte "Netz"
-# ----------------------------------------------
-df_merged = pd.merge(df_indikatoren, df_szenarien, on="Netz", how="inner")
+def preprocess_data(df_indikatoren, df_szenarien):
+    df_merged = pd.merge(df_indikatoren, df_szenarien, on="Netz", how="inner")
+    df_merged.replace(["", " "], pd.NA, inplace=True)
+    for col in df_merged.columns:
+        if col != "Netz":
+            df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce')
+    if df_merged.isnull().values.any():
+        print("Warnung: Fehlende Werte gefunden. Ersetze mit Spaltenmittelwerten.")
+        df_merged.fillna(df_merged.mean(numeric_only=True), inplace=True)
+    return df_merged
 
-# Leere Strings oder fehlerhafte Werte als NaN setzen
-df_merged.replace(["", " "], pd.NA, inplace=True)
+def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir):
+    ergebnisse_szenarien = {}
 
-# Alle Spalten außer "Netz" in numerische Werte umwandeln
-for col in df_merged.columns:
-    if col != "Netz":
-        df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce')  # Ungültige Werte zu NaN umwandeln
+    os.makedirs(output_dir, exist_ok=True)
 
-# Fehlende Werte mit Spaltenmittelwert auffüllen
-if df_merged.isnull().values.any():
-    print("Warnung: Fehlende Werte gefunden. Ersetze mit Spaltenmittelwerten.")
-    df_merged.fillna(df_merged.mean(numeric_only=True), inplace=True)
+    for szenario in szenarien_spalten:
+        X = df_merged[indikatoren_spalten]
+        y = df_merged[szenario]
 
-# Indikatoren- und Szenarien-Spalten identifizieren
-indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]
-szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
+        if y.isnull().all():
+            print(f"Überspringe Regression für {szenario} (nur NaN-Werte).")
+            continue
+        if y.nunique() == 1:
+            print(f"Überspringe Regression für {szenario} (nur konstante Werte).")
+            continue
 
-# -----------------------------------
-# 3) Regression für jedes Szenario
-# -----------------------------------
-ergebnisse_szenarien = {}
+        X_ols = sm.add_constant(X)
+        model_ols = sm.OLS(y, X_ols).fit()
+        ergebnisse_szenarien[szenario] = model_ols
 
-for szenario in szenarien_spalten:
-    X = df_merged[indikatoren_spalten]  # Indikatoren als unabhängige Variablen
-    y = df_merged[szenario]  # Szenario als abhängige Variable
+        print("=" * 70)
+        print(f"Regressionsergebnisse für Szenario: {szenario}")
+        print(model_ols.summary())
 
-    # Falls Szenario nur NaN oder konstante Werte enthält, Regression überspringen
-    if y.isnull().all():
-        print(f"Überspringe Regression für {szenario} (nur NaN-Werte).")
-        continue
-    if y.nunique() == 1:
-        print(f"Überspringe Regression für {szenario} (nur konstante Werte).")
-        continue
+        plot_regression(model_ols, szenario, indikatoren_spalten, output_dir)
+        save_summary(model_ols, szenario, output_dir)
 
-    # Konstanten-Term (Intercept) hinzufügen
-    X_ols = sm.add_constant(X)
+    return ergebnisse_szenarien
 
-    # OLS-Modell anpassen
-    model_ols = sm.OLS(y, X_ols).fit()
+def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir):
+    params_score = model_ols.params
+    conf_score = model_ols.conf_int()
+    params_score_no_intercept = params_score.drop('const')
+    conf_score_no_intercept = conf_score.drop('const')
+    ind_names = params_score_no_intercept.index
+    coef_vals = params_score_no_intercept.values
+    lower_error = coef_vals - conf_score_no_intercept[0]
+    upper_error = conf_score_no_intercept[1] - coef_vals
 
-    # Ergebnisse speichern
-    ergebnisse_szenarien[szenario] = model_ols
+    plt.figure()
+    plt.bar(range(len(ind_names)), coef_vals,
+            yerr=[lower_error, upper_error],
+            capsize=5)
+    plt.xticks(range(len(ind_names)), ind_names, rotation=45, ha="right")
+    plt.title(f"Koeffizienten und 95%-Konfidenz-Intervall: {szenario}")
+    plt.xlabel("Indikatoren")
+    plt.ylabel("Regressionskoeffizient")
+    plt.tight_layout()
 
-    # Konsolenausgabe der Ergebnisse
-    print("=" * 70)
-    print(f"Regressionsergebnisse für Szenario: {szenario}")
-    print(model_ols.summary())
+    plot_path = os.path.join(output_dir, f"regression_{szenario}.png")
+    plt.savefig(plot_path, dpi=300)
+    plt.close()
+    print(f"Plot für {szenario} gespeichert unter: {plot_path}")
 
-# ------------------------------------------------------------------------
-# 4) Aggregierter Szenario-Score berechnen
-# ------------------------------------------------------------------------
-df_merged["Gesamt_Szenario_Score"] = df_merged[szenarien_spalten].mean(axis=1)
+def save_summary(model_ols, szenario, output_dir):
+    with open(os.path.join(output_dir, f"regression_summary_{szenario}.txt"), "w") as f:
+        f.write(model_ols.summary().as_text())
 
-# Regression für den aggregierten Score
-X_score = df_merged[indikatoren_spalten]
-y_score = df_merged["Gesamt_Szenario_Score"]
+# --------------------------
+# Main-Workflow
+# --------------------------
 
-# Falls aggregierter Score NaN oder konstant ist, Regression überspringen
-if y_score.isnull().all():
-    print("Überspringe Regression für aggregierten Szenario-Score (nur NaN-Werte).")
-elif y_score.nunique() == 1:
-    print("Überspringe Regression für aggregierten Szenario-Score (nur konstante Werte).")
-else:
-    X_score_ols = sm.add_constant(X_score)
-    model_score = sm.OLS(y_score, X_score_ols).fit()
-    print("=" * 70)
-    print("Regressionsergebnisse für aggregierten Szenario-Score")
-    print(model_score.summary())
+def main():
+    indikatoren_path =
+    szenarien_path =
+    output_dir =
+
+    df_indikatoren, df_szenarien = lade_daten(indikatoren_path, szenarien_path)
+    df_merged = preprocess_data(df_indikatoren, df_szenarien)
+
+    indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]
+    szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
+
+    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir)
+
+if __name__ == "__main__":
+    main()
