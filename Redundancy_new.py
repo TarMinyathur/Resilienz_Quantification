@@ -23,9 +23,6 @@ als auch der Anteil kritischer Elemente ein.
 
 def Redundancy(net_temp_red3):
     # # Beispielnetz erstellen (IEEE 9-Bus-System)
-    # net_temp_red3 = pn.create_cigre_network_mv("all")
-    # net_temp_red3, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-    # net_temp_red3 = set_missing_limits(net, required_p_mw, required_q_mvar)
 
     # Lastflussberechnung durchführen
     pp.runpp(net_temp_red3)
@@ -75,11 +72,6 @@ def Redundancy(net_temp_red3):
     # Gesamtrate berechnen
     total_checks = Success + Failed
     red_resultsb  = Success / total_checks if total_checks != 0 else 0
-    
-    # # Ergebnisse ausgeben
-    # print("\nErgebnisse der N-2-Redundanzprüfung:")
-    # for element, stats in red_resultsb.items():
-    #     print(f"{element.capitalize()}: Erfolg: {stats['Success']}, Fehlgeschlagen: {stats['Failed']}")
 
         # Berechnung der Komponentenindikatoren:
     component_indicators = {}
@@ -148,14 +140,6 @@ def Redundancy(net_temp_red3):
             "combined": combine_indicators(1.0, red_comp)
         }
 
-    # # Ausgabe der Indikatoren pro Komponente:
-    # print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
-    # for comp, inds in component_indicators.items():
-    #     print(f"{comp.capitalize()}:")
-    #     print(f"  Lastfluss: {inds['lf']:.3f}")
-    #     print(f"  Redundanz: {inds['red']:.3f}")
-    #     print(f"  Kombiniert: {inds['combined']:.3f}")
-
     # Berechnung der Gesamtindikatoren
     # Wir berechnen hier den Durchschnitt der Lastflussindikatoren und der Redundanzindikatoren
     lf_total = 0
@@ -171,14 +155,9 @@ def Redundancy(net_temp_red3):
             red_total += inds["red"]
             count_red += 1
 
-    overall_lf = lf_total / count_lf if count_lf > 0 else 1
-    overall_red = red_total / count_red if count_red > 0 else 1
+    overall_lf = lf_total / count_lf if count_lf > 0 else 0
+    overall_red = red_total / count_red if count_red > 0 else 0
     overall_combined = (overall_lf + overall_red) / 2
-
-    # print("\nGesamtindikatoren:")
-    # print(f"  Lastfluss Gesamt: {overall_lf:.3f}")
-    # print(f"  N-2 Redundanz Gesamt: {overall_red:.3f}")
-    # print(f"  Kombinierter Gesamtindikator: {overall_combined:.3f}")
 
     return overall_lf, overall_red, overall_combined, component_indicators, n2_redundancy_results
 

@@ -1,11 +1,7 @@
-# import pandapower as pp
 import pandapower.networks as pn
-#import itertools
-#import math
 import networkx as nx
 import numpy as np
 import pandas as pd
-#import matplotlib.pyplot as plt
 import time
 from count_elements import count_elements
 from diversity import calculate_shannon_evenness_and_variety
@@ -26,7 +22,6 @@ from buffer import calculate_buffer
 from fxor import flexibility_fxor
 from stressors import stress_scenarios
 from Evaluate_scenario import run_scenario
-
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
@@ -83,7 +78,7 @@ basic = {
 }
 
 selected_indicators = {
-    "all": False,
+    "all": True,
     "self_sufficiency": True,
     "show_self_sufficiency_at_bus": False,
     "system_self_sufficiency": False,
@@ -124,7 +119,6 @@ selected_scenario = {
     "High Load": False,
     "print_results": True,
     "output_excel": True
-
 }
 
 # Main Function

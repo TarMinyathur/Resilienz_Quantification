@@ -17,7 +17,7 @@ def run_scenario(modified_grids, scenario):
 
     # Calculate convergence percentage
     total_cases = results[scenario]["Success"] + results[scenario]["Failed"]
-    convergence_rate = (results[scenario]["Success"] / total_cases) * 100 if total_cases > 0 else 0
+    convergence_rate = (results[scenario]["Success"] / total_cases) if total_cases > 0 else 0
 
     return convergence_rate
 
