@@ -1,7 +1,9 @@
 import pandas as pd
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import os
+import numpy as np
 
 def lade_daten(indikatoren_path, szenarien_path):
     df_indikatoren = pd.read_excel(indikatoren_path)
@@ -51,25 +53,57 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
 def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir):
     params_score = model_ols.params
     conf_score = model_ols.conf_int()
+    p_values = model_ols.pvalues
     params_score_no_intercept = params_score.drop('const')
     conf_score_no_intercept = conf_score.drop('const')
+    p_values_no_intercept = p_values.drop('const')
+
     ind_names = params_score_no_intercept.index
     coef_vals = params_score_no_intercept.values
     lower_error = coef_vals - conf_score_no_intercept[0]
     upper_error = conf_score_no_intercept[1] - coef_vals
 
-    plt.figure()
-    plt.bar(range(len(ind_names)), coef_vals,
+    # Sternchen + Farben für signifikante Koeffizienten
+    ind_labels = []
+    colors = []
+    for ind, val, pval in zip(ind_names, coef_vals, p_values_no_intercept):
+        label = f"{ind}*" if pval < 0.05 else ind
+        ind_labels.append(label)
+        colors.append('green' if val > 0 else 'red')
+
+    # Custom X-Positionen mit mehr Abstand
+    x_pos = np.arange(0, len(ind_names) * 2, 2)  # z.B. Abstand von 2 Einheiten statt 1
+
+    plt.figure(figsize=(12,8))
+    plt.bar(x_pos, coef_vals,
             yerr=[lower_error, upper_error],
-            capsize=5)
-    plt.xticks(range(len(ind_names)), ind_names, rotation=45, ha="right")
+            capsize=5, color=colors)
+
+        # X-Achse hinzufügen
+    plt.xticks(x_pos, ind_labels, rotation=45, ha="right")
+    plt.axhline(y=0, color='grey', linewidth=0.5, linestyle="-")  # Horizontale Linie bei y=0 als Referenz
+
     plt.title(f"Koeffizienten und 95%-Konfidenz-Intervall: {szenario}")
-    plt.xlabel("Indikatoren")
+    plt.xlabel("Indikatoren", labelpad=10)
+    plt.gca().xaxis.set_label_coords(0.5, 0.05)  # x=0.5 zentriert, y negativ = in Plot verschieben
     plt.ylabel("Regressionskoeffizient")
-    plt.tight_layout()
+
+    # Legende hinzufügen
+    legend_patches = [
+        mpatches.Patch(color='green', label='Positiver Koeffizient'),
+        mpatches.Patch(color='red', label='Negativer Koeffizient'),
+        mpatches.Patch(color='white', label='* = signifikant bei p < 0.05', edgecolor='black')
+    ]
+    plt.legend(handles=legend_patches, loc='lower center', bbox_to_anchor=(0.5, -0.5),
+               ncol=3, frameon=False)
+
+    # Fix: mehr Platz unten reservieren!
+    plt.subplots_adjust(bottom=0.3)
+
+    #plt.tight_layout()
 
     plot_path = os.path.join(output_dir, f"regression_{szenario}.png")
-    plt.savefig(plot_path, dpi=300)
+    plt.savefig(plot_path, dpi=400)
     plt.close()
     print(f"Plot für {szenario} gespeichert unter: {plot_path}")
 
