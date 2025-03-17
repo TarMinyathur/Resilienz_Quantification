@@ -113,10 +113,11 @@ selected_scenario = {
     "Storm": False,
     "Fire": False,
     "Line Overload": False,
-    "IT-ransomware attack": False,
+    "IT-Attack": False,
     "Geopolitical": False,
     "High EE generation": False,
     "High Load": False,
+    "Sabotage": True,
     "print_results": True,
     "output_excel": True
 }
@@ -402,12 +403,13 @@ def main():
         dfresultsscenario = add_indicator(dfresultsscenario, basic["Grid"], 0)
 
         for scenario in ["Flood", "Earthquake", "Dunkelflaute", "Storm", "Fire", "Line Overload",
-                             "IT-ransomware attack", "Geopolitical", "High EE generation", "High Load"]:
+                             "IT-Attack", "Geopolitical", "High EE generation", "High Load", "Sabotage"]:
             if selected_scenario[scenario]:
                 stressor = scenario.lower()
-                modified_nets = stress_scenarios(net, [stressor])
-                res_scenario = run_scenario(modified_nets, scenario)
-                dfresultsscenario = add_indicator(dfresultsscenario, scenario, res_scenario)
+                for n in 10:
+                    modified_nets = stress_scenarios(net, [stressor])
+                    res_scenario = run_scenario(modified_nets, scenario)
+                    dfresultsscenario = add_indicator(dfresultsscenario, scenario, res_scenario)
 
         if not dfresultsscenario.empty:
             # Compute the average of all values excluding the first row
