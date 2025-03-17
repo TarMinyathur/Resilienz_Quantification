@@ -64,7 +64,7 @@ def get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reducti
     return buses_to_disable, x_start, y_start, side_length
 
 
-def plot_net(net_temp_geo, x_start, y_start, side_length):
+def plot_net_temp_geo(net_temp_geo, x_start, y_start, side_length):
     # Visualize the net_temp_geowork
     fig, ax = plt.subplots(figsize=(10, 8))
     

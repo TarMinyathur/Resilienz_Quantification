@@ -3,7 +3,7 @@ import pandapower.networks as pn
 import numpy as np
 import copy 
 import matplotlib.pyplot as plt
-from geo_data import get_geodata_coordinates, get_buses_to_disable, plot_net, components_to_disable_dynamic
+from geo_data import get_geodata_coordinates, get_buses_to_disable, plot_net_temp_geo, components_to_disable_dynamic
 
 
 
@@ -19,6 +19,11 @@ class Scenario:
         self.component_data = {
                     "PV": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"] == "PV"], "element": "sgen", "column": "p_mw"},
                     "WP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"] == "WP"], "element": "sgen", "column": "p_mw"},
+                    "CHP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains("CHP", case=False, na=False)], "element": "sgen", "column": "p_mw"},
+                    "fuel_cell": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains("fuel cell", case=False, na=False)], "element": "sgen", "column": "p_mw"},
+                    "sgen": {"filter": lambda net_temp_stress: net_temp_stress.sgen, "element": "sgen", "column": "p_mw"},
+                    "gen": {"filter": lambda net_temp_stress: net_temp_stress.gen, "element": "gen", "column": "p_mw"},
+                    "load": {"filter": lambda net_temp_stress: net_temp_stress.load, "element": "load", "column": "p_mw"},
                     "trafo": {"filter": lambda net_temp_stress: net_temp_stress.trafo, "element": "trafo", "column": "in_service"},
                     "underground_lines": {"filter": lambda net_temp_stress: net_temp_stress.line[net_temp_stress.line["type"] == "cs"], "element": "line", "column": "in_service"},
                     "overhead_lines": {"filter": lambda net_temp_stress: net_temp_stress.line[net_temp_stress.line["type"] == "ol"], "element": "line", "column": "in_service"},
@@ -89,10 +94,15 @@ def scenarios(net_temp_stress, selected_scenarios):
 # geo_data optional, if no defined -> set False, see Class Scenario
 def get_scenarios():  
     return [
-        Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.0),
-        Scenario("hagel", mode="types", targets=["PV"], reduction_rate=0.5),
-        Scenario("sabotage", mode="components", targets=["trafo"], reduction_rate= 0.5, random_select=False),
-        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate= 0.5, random_select=True),
+        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate= 0.4, random_select=True),
+        Scenario("earthquake", mode="component", targets=["overhead_lines","underground_lines","trafo","load","gen","sgen"], reduction_rate= 0.3, random_select=True),
+        Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=0.05),
+        Scenario("storm", mode="component", targets=["overhead_lines", "underground_lines","trafo"], reduction_rate=0.3, random_select=True),
+        # cyber_attack random ist iwie schon in earthquake abgebildetScenario("random", mode="component", targets=["PV"], reduction_rate=0.5),
+        Scenario("geopolitical_chp", mode="component", targets=["CHP"], reduction_rate=1, random_select=True),
+        Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=1, random_select=True),
+        Scenario("high_load", mode="types", targets=["load"], reduction_rate=2),
+        Scenario("sabotage_trafo", mode="components", targets=["trafo"], reduction_rate=0.1 , random_select=True),
         # Add more scenarios as needed
     ]
 
@@ -111,14 +121,17 @@ def stress_scenarios(net_temp_stress, selected_scenarios):
         print(f"Amount of modified net_temp_stresss: {len(modified_net_temp_stresss)}")
 
         # for name, modified_net_temp_stress in modified_net_temp_stresss:
-            # print(f"Scenario {name} - Trafo Tabelle: \n {modified_net_temp_stress.trafo}")
-            # print(f"Scenario {name} - sgen Tabelle: \n {modified_net_temp_stress.sgen}")
+        #     # print(f"Scenario {name} - Trafo Tabelle: \n {modified_net_temp_stress.trafo}")
+        #     print(f"Scenario {name} - load Tabelle: \n {modified_net_temp_stress.load}")
     return modified_net_temp_stresss
 
 
-# 
-# if __name__ == "__main__":
-#     net_temp_stress = pn.create_cigre_net_temp_stresswork_mv(with_der="all")
-#     net_temp_stress_stress = stress_scenarios(net_temp_stress)
+
+if __name__ == "__main__":
+    net_temp_stress = pn.create_cigre_network_mv(with_der="all")
+    # net_temp_stress = pn.create_cigre_network_hv(length_km_6a_6b=0.1)
+    selected_scenarios = ["flood", "earthquake", "dunkelflaute", "storm", "geopolitical_chp", "geopolitical_h2", "high_load", "sabotage_trafo", ] 
+    
+    net_temp_stress_stress = stress_scenarios(net_temp_stress, selected_scenarios)
 
     
