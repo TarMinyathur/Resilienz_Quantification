@@ -79,20 +79,20 @@ basic = {
 
 selected_indicators = {
     "all": True,
-    "self_sufficiency": True,
+    "Self Sufficiency": True,
     "show_self_sufficiency_at_bus": False,
-    "system_self_sufficiency": False,
-    "generation_shannon_evenness": False,
-    "generation_variety": False,
-    "line_shannon_evenness": False,
-    "line_variety": False,
-    "load_shannon_evenness": False,
-    "load_variety": False,
-    "disparity_generators": False,
-    "disparity_load": False,
-    "disparity_trafo": False,
-    "disparity_lines": False,
-    "n_3_redundancy": False,
+    "System Self Sufficiency": False,
+    "Generation Shannon Evenness": False,
+    "Generation Variety": False,
+    "Line Shannon Evenness": False,
+    "Line Variety": False,
+    "Load Shannon Evenness": False,
+    "Load Variety": False,
+    "Disparity Generators": False,
+    "Disparity Loads": False,
+    "Disparity Transformators": False,
+    "Disparity Lines": False,
+    "N-3 Redundancy": False,
     "n_3_redundancy_print": False,
     "Redundancy": False,
     "GraphenTheorie": True,
@@ -167,18 +167,18 @@ def main():
             if key != "all":  # 'all' selbst bleibt unverändert
                 selected_indicators[key] = True
 
-    if selected_indicators["self_sufficiency"]:
+    if selected_indicators["Self Sufficiency"]:
         # Calculate generation factors
         generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
         indi_selfsuff = float(selfsuff(net,generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
         dfinalresults = add_indicator(dfinalresults, 'self sufficiency at bus level', indi_selfsuff)
 
-    if selected_indicators["system_self_sufficiency"]:
+    if selected_indicators["System Self Sufficiency"]:
         netsa = net.deepcopy()
         indi_selfsuff_neu = selfsufficiency_neu(netsa)
         dfinalresults = add_indicator(dfinalresults, 'System Self Sufficiency', indi_selfsuff_neu)
 
-    if selected_indicators["generation_shannon_evenness"] or selected_indicators["line_shannon_evenness"] or selected_indicators["load_shannon_evenness"]:
+    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Line Shannon Evenness"] or selected_indicators["Load Shannon Evenness"]:
         # Define the maximum known types for each component
         max_known_types = {
             'generation': 8,
@@ -188,24 +188,24 @@ def main():
             # Example: 10 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
         }
 
-    if selected_indicators["generation_shannon_evenness"]:
+    if selected_indicators["Generation Shannon Evenness"]:
         # Combine sgen, gen, and storage into one DataFrame
         generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
         evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
         dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
-        if selected_indicators["generation_variety"]:
+        if selected_indicators["Generation Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety_scaled)
 
-    if selected_indicators["line_shannon_evenness"]:
+    if selected_indicators["Line Shannon Evenness"]:
         evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
         dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness)
-        if selected_indicators["line_variety"]:
+        if selected_indicators["Line Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
 
-    if selected_indicators["load_shannon_evenness"]:
+    if selected_indicators["Load Shannon Evenness"]:
         evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
         dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
-        if selected_indicators["load_variety"]:
+        if selected_indicators["Load Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
 
     if selected_indicators["GraphenTheorie"]:
@@ -270,8 +270,8 @@ def main():
 
         dfinalresults = GraphenTheorieIndicator(G, dfinalresults)
 
-    if selected_indicators["disparity_generators"]:
-        if not selected_indicators["self_sufficiency"]:
+    if selected_indicators["Disparity Generators"]:
+        if not selected_indicators["Self Sufficiency"]:
             # Calculate generation factors
             generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
 
@@ -285,13 +285,13 @@ def main():
         dfinalresults = add_indicator(dfinalresults, 'Disparity Generators',
                                       ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
 
-    if selected_indicators["disparity_load"]:
+    if selected_indicators["Disparity Loads"]:
         disparity_df_load, max_integral_load = calculate_load_disparity(net)
         integral_value_load = disparity_df_load.values.sum()
         ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load,integral_value_load / max_integral_load)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Load',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Loads',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
 
-    if selected_indicators["disparity_trafo"]:
+    if selected_indicators["Disparity Transformators"]:
         disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
         integral_value_trafo = disparity_df_trafo.values.sum()
         if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
@@ -300,15 +300,15 @@ def main():
         else:
             ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
 
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Trafo',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformators',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
 
-    if selected_indicators["disparity_lines"]:
+    if selected_indicators["Disparity Lines"]:
         disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
         integral_value_line = disparity_df_lines.values.sum()
         ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
 
-    if selected_indicators["n_3_redundancy"]:
+    if selected_indicators["N-3 Redundancy"]:
         if not basic["Overview_Grid"]:
             # Count elements and scaled elements
             element_counts = count_elements(net)
@@ -337,7 +337,7 @@ def main():
         rate = Success / total_checks if total_checks != 0 else 0
 
         # Ergebnis in DataFrame speichern
-        dfinalresults = add_indicator(dfinalresults, 'Overall n-3 Redundancy', rate)
+        dfinalresults = add_indicator(dfinalresults, 'N-3 Redundancy', rate)
 
 
     if selected_indicators["Redundancy"]:
@@ -367,9 +367,9 @@ def main():
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)
-        dfinalresults = add_indicator(dfinalresults, 'Flex Netzreserve', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flex Reserve krit Leitungen', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flexibilität Gesamt', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Netzreserve', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve krit Leitungen', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibilität Combined', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
 
     if selected_indicators["Buffer"]:
         Speicher = calculate_buffer(net)
@@ -377,7 +377,7 @@ def main():
 
     if selected_indicators["Flexibility_fxor"]:
         Flex_fxor = flexibility_fxor(net, False)
-        dfinalresults = add_indicator(dfinalresults, 'Feasible operating region', Flex_fxor)
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility fFeasible operating region', Flex_fxor)
 
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")
