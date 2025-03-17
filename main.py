@@ -406,7 +406,7 @@ def main():
                              "IT-Attack", "Geopolitical", "High EE generation", "High Load", "Sabotage"]:
             if selected_scenario[scenario]:
                 stressor = scenario.lower()
-                for n in 10:
+                for n in range(10):
                     modified_nets = stress_scenarios(net, [stressor])
                     res_scenario = run_scenario(modified_nets, scenario)
                     dfresultsscenario = add_indicator(dfresultsscenario, scenario, res_scenario)
