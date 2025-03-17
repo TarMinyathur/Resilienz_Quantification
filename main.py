@@ -90,7 +90,7 @@ selected_indicators = {
     "Load Variety": False,
     "Disparity Generators": False,
     "Disparity Loads": False,
-    "Disparity Transformators": False,
+    "Disparity Transformers": False,
     "Disparity Lines": False,
     "N-3 Redundancy": False,
     "n_3_redundancy_print": False,
@@ -291,7 +291,7 @@ def main():
         ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load,integral_value_load / max_integral_load)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Loads',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
 
-    if selected_indicators["Disparity Transformators"]:
+    if selected_indicators["Disparity Transformers"]:
         disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
         integral_value_trafo = disparity_df_trafo.values.sum()
         if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
@@ -300,7 +300,7 @@ def main():
         else:
             ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
 
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformators',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
 
     if selected_indicators["Disparity Lines"]:
         disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
