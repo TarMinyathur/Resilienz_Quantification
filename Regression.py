@@ -24,6 +24,9 @@ def preprocess_data(df_indikatoren, df_szenarien):
 def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir):
     ergebnisse_szenarien = {}
 
+    # DataFrame zur Sammlung der Regressionsergebnisse
+    df_results = pd.DataFrame(index=indikatoren_spalten)
+
     os.makedirs(output_dir, exist_ok=True)
 
     for szenario in szenarien_spalten:
@@ -45,8 +48,42 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         print(f"Regressionsergebnisse für Szenario: {szenario}")
         print(model_ols.summary())
 
+        # Ergebnisse extrahieren
+        params = model_ols.params.drop('const')
+        std_errors = model_ols.bse.drop('const')
+        pvalues = model_ols.pvalues.drop('const')
+        conf_int = model_ols.conf_int().drop('const')
+
+        # Sternchen-Logik für wissenschaftliche Notation
+        params_stars = []
+        pvalues_stars = []
+
+        for param, pval in zip(params, pvalues):
+            if pval < 0.001:
+                star = "***"
+            elif pval < 0.01:
+                star = "**"
+            elif pval < 0.05:
+                star = "*"
+            else:
+                star = ""
+            params_stars.append(f"{param:.4f}{star}")
+            pvalues_stars.append(f"{pval:.4f}{star}")
+
+        # DataFrame füllen
+        df_results[f'coeff_{szenario}'] = params_stars
+        df_results[f'std_error_{szenario}'] = std_errors.round(4)
+        df_results[f'P>t_{szenario}'] = pvalues_stars
+        df_results[f'conf_int_{szenario}'] = conf_int.apply(lambda row: f"[{row[0]:.3f}, {row[1]:.3f}]", axis=1)
+
+        # Plots und Summary speichern
         plot_regression(model_ols, szenario, indikatoren_spalten, output_dir)
         save_summary(model_ols, szenario, output_dir)
+
+    # Excel Export am Ende
+    export_path = os.path.join(output_dir, "regression_results.xlsx")
+    df_results.to_excel(export_path)
+    print(f"Gesamtergebnis-DataFrame wurde als Excel exportiert: {export_path}")
 
     return ergebnisse_szenarien
 
@@ -83,16 +120,16 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir):
     plt.xticks(x_pos, ind_labels, rotation=45, ha="right")
     plt.axhline(y=0, color='grey', linewidth=0.5, linestyle="-")  # Horizontale Linie bei y=0 als Referenz
 
-    plt.title(f"Koeffizienten und 95%-Konfidenz-Intervall: {szenario}")
-    plt.xlabel("Indikatoren", labelpad=10)
-    plt.gca().xaxis.set_label_coords(0.5, 0.05)  # x=0.5 zentriert, y negativ = in Plot verschieben
-    plt.ylabel("Regressionskoeffizient")
+    plt.title(f"Coefficients and 95% Confidence Interval: {szenario}")
+    plt.xlabel("Indicators", labelpad=10)
+    plt.gca().xaxis.set_label_coords(0.5, 0.05)  # x=0.5 centers it, y positive moves it inside the plot
+    plt.ylabel("Regression Coefficient")
 
-    # Legende hinzufügen
+    # Add legend
     legend_patches = [
-        mpatches.Patch(color='green', label='Positiver Koeffizient'),
-        mpatches.Patch(color='red', label='Negativer Koeffizient'),
-        mpatches.Patch(color='white', label='* = signifikant bei p < 0.05', edgecolor='black')
+        mpatches.Patch(color='green', label='Positive Coefficient'),
+        mpatches.Patch(color='red', label='Negative Coefficient'),
+        mpatches.Patch(facecolor='white', label='* = significant at p < 0.05')
     ]
     plt.legend(handles=legend_patches, loc='lower center', bbox_to_anchor=(0.5, -0.5),
                ncol=3, frameon=False)
