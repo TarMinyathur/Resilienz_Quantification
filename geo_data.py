@@ -63,6 +63,65 @@ def get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reducti
 
     return buses_to_disable, x_start, y_start, side_length
 
+def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select, reduction_rate):
+    if not x_coords or not y_coords:
+        # No data, bail out
+        return [], 0, 0, 0
+
+    x_min, x_max = min(x_coords), max(x_coords)
+    y_min, y_max = min(y_coords), max(y_coords)
+
+    # Center of bounding box
+    center_x = (x_min + x_max) / 2
+    center_y = (y_min + y_max) / 2
+
+    # Outer circle radius + margin
+    half_diagonal = 0.5 * np.sqrt((x_max - x_min)**2 + (y_max - y_min)**2)
+    margin = 0.2 * half_diagonal   # 20% margin
+    outer_radius = half_diagonal + margin
+
+    # Flooded area = bounding circle area * reduction_rate
+    # OR your own formula for how big the flooded area should be.
+    # If you want the same logic as the rectangle case:
+    bounding_area = np.pi * (outer_radius**2)
+    area_destroyed = bounding_area * reduction_rate
+
+    # Convert to flood circle radius
+    flood_radius = np.sqrt(area_destroyed / np.pi)
+
+    print(f"Total bounding circle area: {bounding_area:.2f}")
+    print(f"Area to be destroyed: {area_destroyed:.2f}")
+    print(f"Flood circle radius: {flood_radius:.2f}")
+
+    # Pick random center for the flood circle
+    if random_select:
+        # We want it fully inside the big circle, so max radial offset is:
+        max_offset = outer_radius - flood_radius
+        if max_offset < 0:
+            # If flood_radius is bigger than outer_radius, just flood everything
+            flood_center_x, flood_center_y = center_x, center_y
+            flood_radius = outer_radius
+        else:
+            rho = np.random.uniform(0, max_offset)
+            theta = np.random.uniform(0, 2 * np.pi)
+            flood_center_x = center_x + rho * np.cos(theta)
+            flood_center_y = center_y + rho * np.sin(theta)
+    else:
+        # For a fixed scenario, you could just choose the bounding circle center
+        flood_center_x, flood_center_y = center_x, center_y
+
+    # Find buses within the flood circle
+    dist_sq = (net_temp_geo.bus_geodata["x"] - flood_center_x)**2 + \
+              (net_temp_geo.bus_geodata["y"] - flood_center_y)**2
+    flood_radius_sq = flood_radius**2
+
+    buses_to_disable = net_temp_geo.bus_geodata[dist_sq <= flood_radius_sq].index
+
+    print(f"Buses to be disabled: {list(buses_to_disable)}")
+
+    # Return the center coords and radius if you want to plot
+    return buses_to_disable, flood_center_x, flood_center_y, flood_radius
+
 
 def plot_net(net_temp_geo, x_start, y_start, side_length):
     # Visualize the net_temp_geowork
@@ -149,6 +208,8 @@ def components_to_disable_dynamic(net_temp_geo, buses_to_disable):
     if not deactivated_components:
         print("no components deactivated")
 
+    return net_temp_geo
+
 
 def geo_referenced_destruction(net_temp_geo, reduction_rate, random_select):
     # please note: as of today only geo_data stored in buses will be handled
@@ -157,15 +218,14 @@ def geo_referenced_destruction(net_temp_geo, reduction_rate, random_select):
     x_coords, y_coords = get_geodata_coordinates(net_temp_geo)
 
 
-    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reduction_rate)
-    plot_net_temp_geo(net_temp_geo, x_start, y_start, side_length)
+    #buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reduction_rate)
+    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords,random_select, reduction_rate)
+
+    plot_net(net_temp_geo, x_start, y_start, side_length)
     # net_temp_geo = components_to_disable_static(net_temp_geo, buses_to_disable)
     net_temp_geo = components_to_disable_dynamic(net_temp_geo, buses_to_disable)
     
     return net_temp_geo
-
-
-
 
 if __name__ == "__main__":
     net_temp_geo = pn.create_cigre_net_temp_geowork_mv(with_der="all")

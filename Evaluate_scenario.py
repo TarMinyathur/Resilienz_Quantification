@@ -1,54 +1,46 @@
 import pandapower as pp
-import concurrent.futures
 
+def run_scenario(net, scenario_name):
+    """
+    Runs an optimal power flow (OPF) on 'net' using two attempts:
+      1) init='pf'
+      2) init='flat' if the first attempt fails
 
-def run_scenario(modified_grids, scenario):
-    results = {scenario: {"Success": 0, "Failed": 0}}
-
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Unpack name and grid correctly from modified_grids
-        futures = {executor.submit(process_scenario, grid): name for name, grid in modified_grids}
-
-        # Collect results
-        for future in concurrent.futures.as_completed(futures):
-            _, status = future.result()
-            results[scenario][status] += 1
-
-    # Calculate convergence percentage
-    total_cases = results[scenario]["Success"] + results[scenario]["Failed"]
-    convergence_rate = (results[scenario]["Success"] / total_cases) if total_cases > 0 else 0
-
-    return convergence_rate
-
-
-def process_scenario(net_temp_red):
-    """ Runs an optimal power flow (OPF) simulation and returns success/failure status. """
+    Returns:
+        1 for success (OPF converged)
+        0 for failure (OPF failed to converge or raised an exception)
+    """
     try:
-        # First attempt with init="pf"
+        # First attempt with init='pf'
         pp.runopp(
-            net_temp_red,
+            net,
             init="pf",
             calculate_voltage_angles=True,
             enforce_q_lims=True,
             distributed_slack=True
         )
-        return "Scenario", "Success"
+        print(f"Scenario '{scenario_name}': OPF => SUCCESS (init='pf')")
+        return 1
 
     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
+        # If first attempt fails, try init='flat'
         try:
-            # Retry with init="flat"
             pp.runopp(
-                net_temp_red,
+                net,
                 init="flat",
                 calculate_voltage_angles=True,
                 enforce_q_lims=True,
                 distributed_slack=True
             )
-            return "Scenario", "Success"
+            print(f"Scenario '{scenario_name}': OPF => SUCCESS (init='flat')")
+            return 1
         except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-            return "Scenario", "Failed"
-        except Exception:
-            return "Scenario", "Failed"
-    except Exception:
-        return "Scenario", "Failed"
+            print(f"Scenario '{scenario_name}': OPF => FAILED (both init='pf' and init='flat')")
+            return 0
+        except Exception as e:
+            print(f"Scenario '{scenario_name}': Unexpected error in second attempt: {e}")
+            return 0
+
+    except Exception as e:
+        print(f"Scenario '{scenario_name}': Unexpected error in first attempt: {e}")
+        return 0

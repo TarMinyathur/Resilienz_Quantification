@@ -90,7 +90,7 @@ print("\n--- OPF Convergence Test for Pandapower Grids ---\n")
 
 def run_corrected_opf(net):
 
-    # 🔹 Fix Voltage Limits (Prevent Collapse)
+        # 🔹 Fix Voltage Limits (Prevent Collapse)
     net.bus["min_vm_pu"] = 0.94  # Min Voltage = 0.9 p.u.
     net.bus["max_vm_pu"] = 1.06  # Max Voltage = 1.1 p.u.
 
@@ -198,6 +198,7 @@ for grid_name, grid_func in test_grids:
     try:
         # Run Power Flow first
         pp.runpp(net)
+        print(net.trafo)
         # print(f"{grid_name}: Power Flow converged successfully!")
         #
         # print("Spannungen an den Netzknoten:")

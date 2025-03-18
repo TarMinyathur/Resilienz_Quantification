@@ -22,6 +22,7 @@ from buffer import calculate_buffer
 from fxor import flexibility_fxor
 from stressors import stress_scenarios
 from Evaluate_scenario import run_scenario
+import os
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
@@ -78,46 +79,47 @@ basic = {
 }
 
 selected_indicators = {
-    "all": True,
+    "all": False,
     "Self Sufficiency": True,
     "show_self_sufficiency_at_bus": False,
     "System Self Sufficiency": False,
-    "Generation Shannon Evenness": False,
-    "Generation Variety": False,
-    "Line Shannon Evenness": False,
-    "Line Variety": False,
-    "Load Shannon Evenness": False,
-    "Load Variety": False,
-    "Disparity Generators": False,
-    "Disparity Loads": False,
-    "Disparity Transformers": False,
-    "Disparity Lines": False,
+    "Generation Shannon Evenness": True,
+    "Generation Variety": True,
+    "Line Shannon Evenness": True,
+    "Line Variety": True,
+    "Load Shannon Evenness": True,
+    "Load Variety": True,
+    "Disparity Generators": True,
+    "Disparity Loads": True,
+    "Disparity Transformers": True,
+    "Disparity Lines": True,
     "N-3 Redundancy": False,
     "n_3_redundancy_print": False,
     "Redundancy": False,
     "GraphenTheorie": True,
     "Flexibility": True,
     "Flexibility_fxor": True,
-    "Buffer": False,
+    "Buffer": True,
     "show_spider_plot": False,
     "print_results": True,
-    "output_excel": False
+    "output_excel": True
 }
 
 selected_scenario = {
     "stress_scenario": True,
     "all": False,
-    "Flood": True,
-    "Earthquake": False,
-    "Dunkelflaute": True,
-    "Storm": False,
-    "Fire": False,
-    "Line Overload": False,
-    "IT-Attack": False,
-    "Geopolitical": False,
-    "High EE generation": False,
-    "High Load": False,
-    "Sabotage": True,
+    "Flood": {"active": True, "runs": 50},
+    "Earthquake": {"active": True, "runs": 50},
+    "Dunkelflaute": {"active": True, "runs": 5},
+    "Storm": {"active": True, "runs": 50},
+    "Fire": {"active": False, "runs": 20},
+    "Line Overload": {"active": False, "runs": 10},
+    "IT-Attack": {"active": False, "runs": 20},
+    "Geopolitical_chp": {"active": True, "runs": 5},
+    "Geopolitical_h2": {"active": True, "runs": 5},
+    "High EE generation": {"active": False, "runs": 10},
+    "high_load": {"active": True, "runs": 20},
+    "sabotage_trafo": {"active": True, "runs": 25},
     "print_results": True,
     "output_excel": True
 }
@@ -171,12 +173,12 @@ def main():
         # Calculate generation factors
         generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
         indi_selfsuff = float(selfsuff(net,generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
-        dfinalresults = add_indicator(dfinalresults, 'self sufficiency at bus level', indi_selfsuff)
+        dfinalresults = add_indicator(dfinalresults, 'Self Sufficiency At Bus Level', indi_selfsuff)
 
     if selected_indicators["System Self Sufficiency"]:
         netsa = net.deepcopy()
         indi_selfsuff_neu = selfsufficiency_neu(netsa)
-        dfinalresults = add_indicator(dfinalresults, 'System Self Sufficiency', indi_selfsuff_neu)
+        dfinalresults = add_indicator(dfinalresults, 'Self Sufficiency System', indi_selfsuff_neu)
 
     if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Line Shannon Evenness"] or selected_indicators["Load Shannon Evenness"]:
         # Define the maximum known types for each component
@@ -188,25 +190,69 @@ def main():
             # Example: 10 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
         }
 
-    if selected_indicators["Generation Shannon Evenness"]:
-        # Combine sgen, gen, and storage into one DataFrame
+    # if selected_indicators["Generation Shannon Evenness"]:
+    #     # Combine sgen, gen, and storage into one DataFrame
+    #     generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
+    #     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
+    #     dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
+    #     if selected_indicators["Generation Variety"]:
+    #         dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety_scaled)
+    #
+    # if selected_indicators["Line Shannon Evenness"]:
+    #     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
+    #     dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness)
+    #     if selected_indicators["Line Variety"]:
+    #         dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
+    #
+    # if selected_indicators["Load Shannon Evenness"]:
+    #     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
+    #     dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
+    #     if selected_indicators["Load Variety"]:
+    #         dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
+
+    # Initialize lists to store the values
+    evenness_values = []
+    variety_values = []
+
+    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"]:
         generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
-        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
+        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data,
+                                                                                                max_known_types[
+                                                                                                    'generation'])
+        evenness_values.append(evenness)
+        variety_values.append(variety_scaled)
         dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
         if selected_indicators["Generation Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety_scaled)
 
-    if selected_indicators["Line Shannon Evenness"]:
-        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
+    if selected_indicators["Line Shannon Evenness"] or selected_indicators["Line Variety"]:
+        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line,
+                                                                                                max_known_types['line'])
+        evenness_values.append(evenness)
+        variety_values.append(variety_scaled)
         dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness)
         if selected_indicators["Line Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
 
-    if selected_indicators["Load Shannon Evenness"]:
-        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
+
+    if selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"]:
+        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load,
+                                                                                                max_known_types['load'])
+        evenness_values.append(evenness)
+        variety_values.append(variety_scaled)
         dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
         if selected_indicators["Load Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
+
+    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"] or selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"] or selected_indicators["Line Shannon Evenness"] or selected_indicators["Line Variety"]:
+        # Calculate averages if lists are not empty
+        if evenness_values:
+            avg_evenness = sum(evenness_values) / len(evenness_values)
+            dfinalresults = add_indicator(dfinalresults, "Shannon Evenness Average", avg_evenness)
+
+        if variety_values:
+            avg_variety = sum(variety_values) / len(variety_values)
+            dfinalresults = add_indicator(dfinalresults, "Variety Average", avg_variety)
 
     if selected_indicators["GraphenTheorie"]:
         # Create an empty NetworkX graph
@@ -270,43 +316,54 @@ def main():
 
         dfinalresults = GraphenTheorieIndicator(G, dfinalresults)
 
+    # Create a list to store individual disparity values
+    disparity_values = []
+
     if selected_indicators["Disparity Generators"]:
         if not selected_indicators["Self Sufficiency"]:
-            # Calculate generation factors
             generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
 
-        # Calculate disparity space
         disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)
-
-        # Compute the integral (sum) over the entire DataFrame
         integral_value_gen = disparity_df_gen.values.sum()
-
-        ddisparity = add_disparity(ddisparity,'Generators', integral_value_gen, max_integral_gen, integral_value_gen / max_integral_gen)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Generators',
-                                      ddisparity.loc[ddisparity['Indicator'] == 'Generators', 'Verhaeltnis'].values[0])
+        ratio_gen = integral_value_gen / max_integral_gen
+        ddisparity = add_disparity(ddisparity, 'Generators', integral_value_gen, max_integral_gen, ratio_gen)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Generators', ratio_gen)
+        disparity_values.append(ratio_gen)
 
     if selected_indicators["Disparity Loads"]:
         disparity_df_load, max_integral_load = calculate_load_disparity(net)
         integral_value_load = disparity_df_load.values.sum()
-        ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load,integral_value_load / max_integral_load)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Loads',ddisparity.loc[ddisparity['Indicator'] == 'Load', 'Verhaeltnis'].values[0])
+        ratio_load = integral_value_load / max_integral_load
+        ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load, ratio_load)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Loads', ratio_load)
+        disparity_values.append(ratio_load)
 
     if selected_indicators["Disparity Transformers"]:
         disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
         integral_value_trafo = disparity_df_trafo.values.sum()
         if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
-            print("Disperity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
-            ddisparity = add_disparity(ddisparity, 'Trafo', 0, max_int_trafo,0)
+            print("Disparity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
+            ratio_trafo = 0
+            ddisparity = add_disparity(ddisparity, 'Trafo', 0, max_int_trafo, 0)
         else:
-            ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, integral_value_trafo / max_int_trafo)
+            ratio_trafo = integral_value_trafo / max_int_trafo
+            ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, ratio_trafo)
 
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers',ddisparity.loc[ddisparity['Indicator'] == 'Trafo', 'Verhaeltnis'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers', ratio_trafo)
+        disparity_values.append(ratio_trafo)
 
     if selected_indicators["Disparity Lines"]:
         disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
         integral_value_line = disparity_df_lines.values.sum()
-        ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines,integral_value_line / max_int_disp_lines)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Lines',ddisparity.loc[ddisparity['Indicator'] == 'Lines', 'Verhaeltnis'].values[0])
+        ratio_line = integral_value_line / max_int_disp_lines
+        ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines, ratio_line)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Lines', ratio_line)
+        disparity_values.append(ratio_line)
+
+    # Calculate overall disparity average
+    if disparity_values:
+        avg_disparity = sum(disparity_values) / len(disparity_values)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Average', avg_disparity)
 
     if selected_indicators["N-3 Redundancy"]:
         if not basic["Overview_Grid"]:
@@ -337,14 +394,14 @@ def main():
         rate = Success / total_checks if total_checks != 0 else 0
 
         # Ergebnis in DataFrame speichern
-        dfinalresults = add_indicator(dfinalresults, 'N-3 Redundancy', rate)
+        dfinalresults = add_indicator(dfinalresults, 'Redundancy N-3', rate)
 
 
     if selected_indicators["Redundancy"]:
         Lastfluss, n2_Redundanz, kombi, component_indicators, red_results = Redundancy(net)
-        dfinalresults = add_indicator(dfinalresults, "Loadflow Redundancy", Lastfluss)
-        dfinalresults = add_indicator(dfinalresults, "N-2 Redundancy", n2_Redundanz)
-        dfinalresults = add_indicator(dfinalresults, "Combined Redundancy", kombi)
+        dfinalresults = add_indicator(dfinalresults, "Redundancy Loadflow", Lastfluss)
+        dfinalresults = add_indicator(dfinalresults, "Redundancy N-2", n2_Redundanz)
+        dfinalresults = add_indicator(dfinalresults, "Redundancy Average", kombi)
 
         #dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
         # Ausgabe der Indikatoren pro Komponente:
@@ -367,9 +424,9 @@ def main():
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility Netzreserve', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve krit Leitungen', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flexibilität Combined', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Grid Reserves', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Critical Lines', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Average', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
 
     if selected_indicators["Buffer"]:
         Speicher = calculate_buffer(net)
@@ -378,6 +435,16 @@ def main():
     if selected_indicators["Flexibility_fxor"]:
         Flex_fxor = flexibility_fxor(net, False)
         dfinalresults = add_indicator(dfinalresults, 'Flexibility fFeasible operating region', Flex_fxor)
+
+    # Separate the first and last row
+    first_row = dfinalresults.iloc[[0]]
+    last_row = dfinalresults.iloc[[-1]]
+
+    # Sort everything in between
+    middle_rows = dfinalresults.iloc[1:-1].sort_values(by="Indicator").reset_index(drop=True)
+
+    # Recombine everything
+    dfinalresults = pd.concat([first_row, middle_rows, last_row], ignore_index=True)
 
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")
@@ -388,30 +455,56 @@ def main():
     if selected_indicators["print_results"]:
         print("Results for Indicators:")
         print(dfinalresults)
-    if selected_indicators["output_excel"]:
-        dfinalresults.T.to_excel("dfinalresults.xlsx", sheet_name="Results Indicator", index=False)
+
 
     if selected_scenario["stress_scenario"]:
 
         if selected_scenario["all"]:
             # Setze alle anderen Indikatoren auf True
-            for key in selected_scenario:
-                if key != "all":  # 'all' selbst bleibt unverändert
-                    selected_scenario[key] = True
+            for key, value in selected_scenario.items():
+                if isinstance(value, dict):
+                    value["active"] = True
 
         dfresultsscenario = pd.DataFrame()
         dfresultsscenario = add_indicator(dfresultsscenario, basic["Grid"], 0)
 
-        for scenario in ["Flood", "Earthquake", "Dunkelflaute", "Storm", "Fire", "Line Overload",
-                             "IT-Attack", "Geopolitical", "High EE generation", "High Load", "Sabotage"]:
-            if selected_scenario[scenario]:
+
+        for scenario, params in selected_scenario.items():
+            if isinstance(params, dict) and params.get("active", False):
                 stressor = scenario.lower()
-                for n in range(10):
+                scenario_values = []
+
+                for n in range(params.get("runs", 10)):  # fallback to 10 runs if "runs" not defined
                     modified_nets = stress_scenarios(net, [stressor])
-                    res_scenario = run_scenario(modified_nets, scenario)
-                    dfresultsscenario = add_indicator(dfresultsscenario, scenario, res_scenario)
+                    # `modified_nets` is a list of (scenario_name, modified_net) tuples.
+
+                    if not modified_nets:
+                        print("No modified net returned. Skipping this scenario.")
+                        continue
+
+                    # Extract the first (and presumably only) tuple
+                    scenario_name, single_net = modified_nets[0]
+
+                    # Now you can run the OPF using `single_net`
+                    res_scenario = run_scenario(single_net, scenario_name)
+                    scenario_values.append(res_scenario)
+                    del modified_nets  # optional
+
+                # Compute the average for this scenario
+                print(f"{scenario_values}")
+                avg_value = sum(scenario_values) / len(scenario_values)
+                dfresultsscenario = add_indicator(dfresultsscenario, scenario, avg_value)
 
         if not dfresultsscenario.empty:
+            # Separate the first and last row
+            first_row = dfresultsscenario.iloc[[0]]
+
+            # Sort everything in between
+            middle_rows = dfresultsscenario.iloc[1:].sort_values(by="Indicator").reset_index(drop=True)
+
+            # Recombine everything
+            dfresultsscenario = pd.concat([first_row, middle_rows], ignore_index=True)
+
             # Compute the average of all values excluding the first row
             if len(dfresultsscenario) > 1:  # Ensure there are enough rows to calculate an average
                 scenario_average_value = dfresultsscenario["Value"].iloc[1:].mean()  # Exclude the first row
@@ -421,8 +514,19 @@ def main():
             if selected_scenario["print_results"]:
                 print(dfresultsscenario)
 
-            if selected_scenario["output_excel"]:
-                dfresultsscenario.T.to_excel("dfresultsscenario.xlsx", sheet_name="Results Scenario", index=False)
+    if selected_scenario["output_excel"] or selected_indicators.get("output_excel"):
+        # Output-Dateiname basierend auf basic["Grid"]
+        output_filename = f'Ergebnisse_{basic["Grid"]}.xlsx'
+        output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
+        output_path = os.path.join(output_dir, output_filename)
+
+        # ExcelWriter verwenden, um mehrere Sheets in eine Datei zu schreiben
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            if selected_indicators.get("output_excel"):
+                dfresultsscenario.T.to_excel(writer, sheet_name="Results Scenario", index=False)
+
+            if selected_indicators["output_excel"]:
+                dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
 
 if __name__ == '__main__':
     main()

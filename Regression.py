@@ -153,9 +153,9 @@ def save_summary(model_ols, szenario, output_dir):
 # --------------------------
 
 def main():
-    indikatoren_path =
-    szenarien_path =
-    output_dir =
+    indikatoren_path = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_Indikatoren_final.xlsx"
+    szenarien_path = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_Stressoren_final.xlsx"
+    output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
 
     df_indikatoren, df_szenarien = lade_daten(indikatoren_path, szenarien_path)
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
