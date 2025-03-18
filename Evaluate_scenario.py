@@ -19,7 +19,7 @@ def run_scenario(net, scenario_name):
             enforce_q_lims=True,
             distributed_slack=True
         )
-        print(f"Scenario '{scenario_name}': OPF => SUCCESS (init='pf')")
+        #print(f"Scenario '{scenario_name}': OPF => SUCCESS (init='pf')")
         return 1
 
     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
@@ -32,15 +32,15 @@ def run_scenario(net, scenario_name):
                 enforce_q_lims=True,
                 distributed_slack=True
             )
-            print(f"Scenario '{scenario_name}': OPF => SUCCESS (init='flat')")
+            #print(f"Scenario '{scenario_name}': OPF => SUCCESS (init='flat')")
             return 1
         except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-            print(f"Scenario '{scenario_name}': OPF => FAILED (both init='pf' and init='flat')")
+            #print(f"Scenario '{scenario_name}': OPF => FAILED (both init='pf' and init='flat')")
             return 0
         except Exception as e:
-            print(f"Scenario '{scenario_name}': Unexpected error in second attempt: {e}")
+            #print(f"Scenario '{scenario_name}': Unexpected error in second attempt: {e}")
             return 0
 
     except Exception as e:
-        print(f"Scenario '{scenario_name}': Unexpected error in first attempt: {e}")
+        #print(f"Scenario '{scenario_name}': Unexpected error in first attempt: {e}")
         return 0

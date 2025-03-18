@@ -73,7 +73,6 @@ def increase_generation(net, factor):
 
 # Configuration
 basic = {
-    "Grid": "create_cigre_network_mv_all",  # Change this to select the grid
     "Adjustments": True,
     "Overview_Grid": True
 }
@@ -81,7 +80,7 @@ basic = {
 selected_indicators = {
     "all": False,
     "Self Sufficiency": True,
-    "show_self_sufficiency_at_bus": False,
+    "show_self_sufficiency_at_bus": True,
     "System Self Sufficiency": False,
     "Generation Shannon Evenness": True,
     "Generation Variety": True,
@@ -93,9 +92,9 @@ selected_indicators = {
     "Disparity Loads": True,
     "Disparity Transformers": True,
     "Disparity Lines": True,
-    "N-3 Redundancy": False,
+    "N-3 Redundancy": True,
     "n_3_redundancy_print": False,
-    "Redundancy": False,
+    "Redundancy": True,
     "GraphenTheorie": True,
     "Flexibility": True,
     "Flexibility_fxor": True,
@@ -117,24 +116,24 @@ selected_scenario = {
     "IT-Attack": {"active": False, "runs": 20},
     "Geopolitical_chp": {"active": True, "runs": 5},
     "Geopolitical_h2": {"active": True, "runs": 5},
-    "High EE generation": {"active": False, "runs": 10},
+    "High EE generation": {"active": True, "runs": 20},
     "high_load": {"active": True, "runs": 20},
-    "sabotage_trafo": {"active": True, "runs": 25},
+    "sabotage_trafo": {"active": True, "runs": 20},
     "print_results": True,
     "output_excel": True
 }
 
 # Main Function
-def main():
+def run_analysis_for_single_grid(grid_name):
 
     dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
-    dfinalresults = add_indicator(dfinalresults, basic["Grid"] , 0)
+    dfinalresults = add_indicator(dfinalresults, grid_name , 0)
 
     # Select and create the grid dynamically
-    if basic["Grid"] in grids:
-        net = grids[basic["Grid"]]()
+    if grid_name in grids:
+        net = grids[grid_name]()
     else:
         raise ValueError(f"Unknown Grid Type: {basic['Grid']}")
 
@@ -189,26 +188,6 @@ def main():
             'load': 10
             # Example: 10 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
         }
-
-    # if selected_indicators["Generation Shannon Evenness"]:
-    #     # Combine sgen, gen, and storage into one DataFrame
-    #     generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
-    #     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data, max_known_types['generation'])
-    #     dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
-    #     if selected_indicators["Generation Variety"]:
-    #         dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety_scaled)
-    #
-    # if selected_indicators["Line Shannon Evenness"]:
-    #     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line, max_known_types['line'])
-    #     dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness)
-    #     if selected_indicators["Line Variety"]:
-    #         dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
-    #
-    # if selected_indicators["Load Shannon Evenness"]:
-    #     evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load, max_known_types['load'])
-    #     dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
-    #     if selected_indicators["Load Variety"]:
-    #         dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
 
     # Initialize lists to store the values
     evenness_values = []
@@ -436,16 +415,6 @@ def main():
         Flex_fxor = flexibility_fxor(net, False)
         dfinalresults = add_indicator(dfinalresults, 'Flexibility fFeasible operating region', Flex_fxor)
 
-    # Separate the first and last row
-    first_row = dfinalresults.iloc[[0]]
-    last_row = dfinalresults.iloc[[-1]]
-
-    # Sort everything in between
-    middle_rows = dfinalresults.iloc[1:-1].sort_values(by="Indicator").reset_index(drop=True)
-
-    # Recombine everything
-    dfinalresults = pd.concat([first_row, middle_rows, last_row], ignore_index=True)
-
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")
         for element_type, counts in n3_redundancy_results.items():
@@ -455,6 +424,16 @@ def main():
     if selected_indicators["print_results"]:
         print("Results for Indicators:")
         print(dfinalresults)
+
+    if not dfinalresults.empty:
+        # Separate the first and last row
+        first_row = dfinalresults.iloc[[0]]
+
+        # Sort everything in between
+        middle_rows = dfinalresults.iloc[1:].sort_values(by="Indicator").reset_index(drop=True)
+
+        # Recombine everything
+        dfinalresults = pd.concat([first_row, middle_rows], ignore_index=True)
 
 
     if selected_scenario["stress_scenario"]:
@@ -466,7 +445,7 @@ def main():
                     value["active"] = True
 
         dfresultsscenario = pd.DataFrame()
-        dfresultsscenario = add_indicator(dfresultsscenario, basic["Grid"], 0)
+        dfresultsscenario = add_indicator(dfresultsscenario, grid_name, 0)
 
 
         for scenario, params in selected_scenario.items():
@@ -515,8 +494,8 @@ def main():
                 print(dfresultsscenario)
 
     if selected_scenario["output_excel"] or selected_indicators.get("output_excel"):
-        # Output-Dateiname basierend auf basic["Grid"]
-        output_filename = f'Ergebnisse_{basic["Grid"]}.xlsx'
+        # Output-Dateiname basierend auf grid_name
+        output_filename = f'Ergebnisse_{grid_name}.xlsx'
         output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
         output_path = os.path.join(output_dir, output_filename)
 
@@ -527,6 +506,31 @@ def main():
 
             if selected_indicators["output_excel"]:
                 dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
+
+def run_all_grids():
+    """
+    Loops over the grids dictionary and runs the above 'run_analysis_for_single_grid' on each.
+    """
+    for grid_name in grids:
+        print(f"\n--- Running analysis for grid: {grid_name} ---")
+
+        run_analysis_for_single_grid(grid_name)
+
+def main():
+    """
+    The 'entry point' that is invoked when you run this script.
+    """
+    # Optionally, you can decide whether to process all grids or just one,
+    # e.g. based on some config or command line argument
+    process_all = False  # or read from config/CLI
+
+    if process_all:
+        run_all_grids()
+        # do final post-processing, exporting, etc.
+    else:
+        # Suppose your config says to just run the 'case30' grid
+        grid_name = "mv_all_high10"
+        run_analysis_for_single_grid(grid_name)
 
 if __name__ == '__main__':
     main()

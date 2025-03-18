@@ -136,8 +136,9 @@ def get_scenarios():
                  random_select=True),
         Scenario("geopolitical_chp", mode="component", targets=["CHP"], reduction_rate=random.uniform(0.7, 1), random_select=True),
         Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=random.uniform(0.7, 1), random_select=True),
-        Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1, 5)),
+        Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1.5, 5)),
         Scenario("sabotage_trafo", mode="component", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
+        Scenario("High EE generation", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(1.5, 5)),
     ]
 
 
