@@ -138,7 +138,7 @@ def get_scenarios():
         Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=random.uniform(0.7, 1), random_select=True),
         Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1.5, 5)),
         Scenario("sabotage_trafo", mode="component", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
-        Scenario("High EE generation", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(1.5, 5)),
+        Scenario("high_EE_generation", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(1.5, 5)),
     ]
 
 
@@ -168,66 +168,66 @@ if __name__ == "__main__":
     selected_scenarios = ["flood", "earthquake", "storm", "sabotage_trafo", "dunkelflaute"]
 
     net_temp_stress_stress = stress_scenarios(net_temp_stress, selected_scenarios)
-    for scenario_name, stressed_net in net_temp_stress_stress:
-        print("=" * 60)
-        print(f"Scenario: {scenario_name}")
-
-        # 1) Lines out of service
-        lines_off = stressed_net.line[stressed_net.line.in_service == False]
-        if not lines_off.empty:
-            print("Lines out of service:")
-            print(lines_off[["from_bus", "to_bus", "type"]])
-            print()  # blank line for readability
-
-        # 2) Trafos out of service
-        trafos_off = stressed_net.trafo[stressed_net.trafo.in_service == False]
-        if not trafos_off.empty:
-            print("Transformers out of service:")
-            print(trafos_off[["hv_bus", "lv_bus"]])
-            print()
-
-        # 3) Loads out of service
-        loads_off = stressed_net.load[stressed_net.load.in_service == False]
-        if not loads_off.empty:
-            print("Loads out of service:")
-            print(loads_off[["bus", "p_mw", "q_mvar"]])
-            print()
-
-        # 4) Sgens out of service
-        sgens_off = stressed_net.sgen[stressed_net.sgen.in_service == False]
-        if not sgens_off.empty:
-            print("Static generators (sgen) out of service:")
-            print(sgens_off[["bus", "p_mw", "type"]])
-            print()
-
-        # 5) Gens out of service (if any)
-        if "gen" in stressed_net and not stressed_net.gen.empty:
-            gens_off = stressed_net.gen[stressed_net.gen.in_service == False]
-            if not gens_off.empty:
-                print("Generators (gen) out of service:")
-                print(gens_off[["bus", "p_mw"]])
-                print()
-
-        # If none of the main elements are out of service, you could add:
-        if (lines_off.empty and trafos_off.empty and loads_off.empty and
-                sgens_off.empty and (not "gen" in stressed_net )):
-            print("No elements were set out of service.")
-
-        print("=" * 60, "\n")
-
-        # Compare loads:
-        load_diff = stressed_net.load["p_mw"] - net_temp_stress.load["p_mw"]
-        changed_loads = load_diff[abs(load_diff) > 1e-9]  # anything not zero
-        if not changed_loads.empty:
-            print("Loads whose p_mw changed:")
-            print(changed_loads)
-            print()
-
-        # Compare sgens:
-        sgen_diff = stressed_net.sgen["p_mw"] - net_temp_stress.sgen["p_mw"]
-        changed_sgens = sgen_diff[abs(sgen_diff) > 1e-9]
-        if not changed_sgens.empty:
-            print("Sgens whose p_mw changed:")
-            print(changed_sgens)
-            print()
+    # for scenario_name, stressed_net in net_temp_stress_stress:
+    #     print("=" * 60)
+    #     print(f"Scenario: {scenario_name}")
+    #
+    #     # 1) Lines out of service
+    #     lines_off = stressed_net.line[stressed_net.line.in_service == False]
+    #     if not lines_off.empty:
+    #         print("Lines out of service:")
+    #         print(lines_off[["from_bus", "to_bus", "type"]])
+    #         print()  # blank line for readability
+    #
+    #     # 2) Trafos out of service
+    #     trafos_off = stressed_net.trafo[stressed_net.trafo.in_service == False]
+    #     if not trafos_off.empty:
+    #         print("Transformers out of service:")
+    #         print(trafos_off[["hv_bus", "lv_bus"]])
+    #         print()
+    #
+    #     # 3) Loads out of service
+    #     loads_off = stressed_net.load[stressed_net.load.in_service == False]
+    #     if not loads_off.empty:
+    #         print("Loads out of service:")
+    #         print(loads_off[["bus", "p_mw", "q_mvar"]])
+    #         print()
+    #
+    #     # 4) Sgens out of service
+    #     sgens_off = stressed_net.sgen[stressed_net.sgen.in_service == False]
+    #     if not sgens_off.empty:
+    #         print("Static generators (sgen) out of service:")
+    #         print(sgens_off[["bus", "p_mw", "type"]])
+    #         print()
+    #
+    #     # 5) Gens out of service (if any)
+    #     if "gen" in stressed_net and not stressed_net.gen.empty:
+    #         gens_off = stressed_net.gen[stressed_net.gen.in_service == False]
+    #         if not gens_off.empty:
+    #             print("Generators (gen) out of service:")
+    #             print(gens_off[["bus", "p_mw"]])
+    #             print()
+    #
+    #     # If none of the main elements are out of service, you could add:
+    #     if (lines_off.empty and trafos_off.empty and loads_off.empty and
+    #             sgens_off.empty and (not "gen" in stressed_net )):
+    #         print("No elements were set out of service.")
+    #
+    #     print("=" * 60, "\n")
+    #
+    #     # Compare loads:
+    #     load_diff = stressed_net.load["p_mw"] - net_temp_stress.load["p_mw"]
+    #     changed_loads = load_diff[abs(load_diff) > 1e-9]  # anything not zero
+    #     if not changed_loads.empty:
+    #         print("Loads whose p_mw changed:")
+    #         print(changed_loads)
+    #         print()
+    #
+    #     # Compare sgens:
+    #     sgen_diff = stressed_net.sgen["p_mw"] - net_temp_stress.sgen["p_mw"]
+    #     changed_sgens = sgen_diff[abs(sgen_diff) > 1e-9]
+    #     if not changed_sgens.empty:
+    #         print("Sgens whose p_mw changed:")
+    #         print(changed_sgens)
+    #         print()
 

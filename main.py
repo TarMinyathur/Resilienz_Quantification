@@ -26,20 +26,20 @@ import os
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
-    "GBreducednetwork": pn.GBreducednetwork,
-    "case118": pn.case118,
-    "case14": pn.case14,
-    "case24_ieee_rts": pn.case24_ieee_rts,
-    "case30": pn.case30,
-    "case33bw": pn.case33bw,
-    "case39": pn.case39,
-    "case5": pn.case5,
-    "case6ww": pn.case6ww,
-    "case9": pn.case9,
-    "create_cigre_network_lv": pn.create_cigre_network_lv,
-    "create_cigre_network_mv": pn.create_cigre_network_mv,
-    "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
-    "create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
+    # "GBreducednetwork": pn.GBreducednetwork,
+    # "case118": pn.case118,
+    # "case14": pn.case14,
+    # "case24_ieee_rts": pn.case24_ieee_rts,
+    # "case30": pn.case30,
+    # "case33bw": pn.case33bw,
+    # "case39": pn.case39,
+    # "case5": pn.case5,
+    # "case6ww": pn.case6ww,
+    # "case9": pn.case9,
+    # "create_cigre_network_lv": pn.create_cigre_network_lv,
+    # "create_cigre_network_mv": pn.create_cigre_network_mv,
+    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    # "create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
 
     # Special Cases with Adjustments
@@ -116,7 +116,7 @@ selected_scenario = {
     "IT-Attack": {"active": False, "runs": 20},
     "Geopolitical_chp": {"active": True, "runs": 5},
     "Geopolitical_h2": {"active": True, "runs": 5},
-    "High EE generation": {"active": True, "runs": 20},
+    "high_EE_generation": {"active": False, "runs": 20},
     "high_load": {"active": True, "runs": 20},
     "sabotage_trafo": {"active": True, "runs": 20},
     "print_results": True,
@@ -130,6 +130,11 @@ def run_analysis_for_single_grid(grid_name):
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
     dfinalresults = add_indicator(dfinalresults, grid_name , 0)
+
+    dfresultsscenario = pd.DataFrame()
+    dfresultsscenario = add_indicator(dfresultsscenario, grid_name, 0)
+
+
 
     # Select and create the grid dynamically
     if grid_name in grids:
@@ -444,10 +449,6 @@ def run_analysis_for_single_grid(grid_name):
                 if isinstance(value, dict):
                     value["active"] = True
 
-        dfresultsscenario = pd.DataFrame()
-        dfresultsscenario = add_indicator(dfresultsscenario, grid_name, 0)
-
-
         for scenario, params in selected_scenario.items():
             if isinstance(params, dict) and params.get("active", False):
                 stressor = scenario.lower()
@@ -512,7 +513,7 @@ def run_all_grids():
     Loops over the grids dictionary and runs the above 'run_analysis_for_single_grid' on each.
     """
     for grid_name in grids:
-        print(f"\n--- Running analysis for grid: {grid_name} ---")
+        print(f"\n--- Running analysis for grid: {grid_name} at time.time()---")
 
         run_analysis_for_single_grid(grid_name)
 
@@ -522,7 +523,7 @@ def main():
     """
     # Optionally, you can decide whether to process all grids or just one,
     # e.g. based on some config or command line argument
-    process_all = False  # or read from config/CLI
+    process_all = True  # or read from config/CLI
 
     if process_all:
         run_all_grids()

@@ -153,11 +153,17 @@ def save_summary(model_ols, szenario, output_dir):
 # --------------------------
 
 def main():
-    indikatoren_path = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_Indikatoren_final.xlsx"
-    szenarien_path = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_Stressoren_final.xlsx"
+    # Path to the single Excel file containing both sheets
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final.xlsx"
+
+    # Define the output directory (unchanged)
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
 
-    df_indikatoren, df_szenarien = lade_daten(indikatoren_path, szenarien_path)
+    # Read each worksheet into a separate DataFrame
+    df_indikatoren = pd.read_excel(excel_file, sheet_name="Indikatoren_final")
+    df_szenarien = pd.read_excel(excel_file, sheet_name="Stressoren_final")
+
+    #df_indikatoren, df_szenarien = lade_daten(indikatoren_path, szenarien_path)
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
 
     indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]

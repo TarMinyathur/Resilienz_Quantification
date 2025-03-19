@@ -20,8 +20,8 @@ def get_geodata_coordinates(net_temp_geo):
         y_coords.extend(net_temp_geo.bus_geodata["y"])
 
     # handling geo data in lines available, not covered in code
-    if not net_temp_geo.line_geodata.empty:
-        raise ValueError("geo_data in lines. Not covered in code. Either pick different net or extend code")
+    if not net_temp_geo.line_geodata.empty and net_temp_geo.bus_geodata.empty:
+        raise ValueError("geo_data only in lines. Not covered in code. Either pick different net or extend code")
 
     return x_coords, y_coords
 
