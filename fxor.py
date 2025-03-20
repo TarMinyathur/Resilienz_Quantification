@@ -59,7 +59,10 @@ def device_polygon(p_min, p_max, q_min, q_max, sn_mva=None, circle_resolution=32
     given bounding box constraints and optional s_n (MVA) rating.
     Then take its convex hull to ensure convexity.
     """
+    if any(np.isnan(val) for val in [p_min, p_max, q_min, q_max]):
+        return geom.Polygon()  # or handle as appropriate
     # 1) Rectangle: [p_min, p_max] x [q_min, q_max]
+    #print(f"pmin: {p_min}, pmax:{p_max}, qmin:{q_min}, qmax:{q_max}, sn_mva:{sn_mva}")
     rect_coords = [
         (p_min, q_min),
         (p_min, q_max),
@@ -67,6 +70,10 @@ def device_polygon(p_min, p_max, q_min, q_max, sn_mva=None, circle_resolution=32
         (p_max, q_min),
         (p_min, q_min)  # close
     ]
+
+    if p_min == p_max or q_min == q_max:
+        return geom.Polygon()
+
     rect_poly = geom.Polygon(rect_coords)
 
     # 2) If sn_mva is given, intersect with circle sqrt(P^2 + Q^2) <= sn_mva

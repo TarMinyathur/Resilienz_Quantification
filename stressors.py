@@ -17,13 +17,19 @@ class Scenario:
 
         # dictionary for accessing and "damaging" components correctly
         self.component_data = {
-            "PV": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"] == "PV"],
+            "PV": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)pv(?:_.*)?$')],
                    "element": "sgen", "column": "p_mw"},
-            "WP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"] == "WP"],
+            "WP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:wind(?:_.*)?|wp(?:_.*)?)$')],
+                   "element": "sgen", "column": "p_mw"},
+            "Biomass": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:biomass(?:_.*)?')],
+                   "element": "sgen", "column": "p_mw"},
+            "Hydro": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:hydro(?:_.*)?')],
                    "element": "sgen", "column": "p_mw"},
             "CHP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[
                 net_temp_stress.sgen["type"].str.contains("CHP", case=False, na=False)], "element": "sgen",
                     "column": "p_mw"},
+            "Gasturbine": {"filter": lambda net_temp_stress: net_temp_stress.gen[(net_temp_stress.gen["type"].str.contains("", case=False, na=False)) &
+        (net_temp_stress.gen["name"].str.contains(r'(?i)gas(?:_.*)?$'))],"element": "gen","column": "p_mw"},
             "fuel_cell": {"filter": lambda net_temp_stress: net_temp_stress.sgen[
                 net_temp_stress.sgen["type"].str.contains("fuel cell", case=False, na=False)], "element": "sgen",
                           "column": "p_mw"},
@@ -124,21 +130,21 @@ def scenarios(net_temp_stress, selected_scenarios):
 # geo_data optional, if no defined -> set False, see Class Scenario
 def get_scenarios():
     return [
-        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.3, 1), random_select=True),
+        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 1), random_select=True),
         Scenario("earthquake", mode="component",
-                 targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(4,6)),
+                 targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(2,6)),
                  reduction_rate=random.uniform(0.3, 1),
                  random_select=True),
         Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(0, 0.15)),
         Scenario("storm", mode="component",
                  targets=random.sample(["overhead_lines", "underground_lines", "trafo"], k=random.randint(1,3)),
-                 reduction_rate=random.uniform(0, 1),
+                 reduction_rate=random.uniform(0.1, 1),
                  random_select=True),
-        Scenario("geopolitical_chp", mode="component", targets=["CHP"], reduction_rate=random.uniform(0.7, 1), random_select=True),
+        Scenario("geopolitical_gas", mode="component", targets=["CHP", "Gasturbine"], reduction_rate=random.uniform(0.7, 1), random_select=True),
         Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=random.uniform(0.7, 1), random_select=True),
         Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1.5, 5)),
         Scenario("sabotage_trafo", mode="component", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
-        Scenario("high_EE_generation", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(1.5, 5)),
+        Scenario("high_EE_generation", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1.5, 5)),
     ]
 
 

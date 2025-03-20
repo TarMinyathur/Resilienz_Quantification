@@ -5,7 +5,8 @@ import pandas as pd
 import time
 from count_elements import count_elements
 from diversity import calculate_shannon_evenness_and_variety
-from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, calculate_load_disparity
+from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, \
+    calculate_load_disparity
 from GenerationFactors import calculate_generation_factors
 from Redundancy_new import Redundancy
 from Redundancy import n_3_redundancy_check
@@ -13,8 +14,8 @@ from visualize import plot_spider_chart
 from initialize import add_indicator
 from initialize import add_disparity
 from indi_gt import GraphenTheorieIndicator
-from adjustments import set_missing_limits
-from adjustments import determine_minimum_ext_grid_power
+from adjustments_new import set_missing_limits
+from adjustments_new import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
 from flexibility import calculate_flexibility
@@ -23,29 +24,174 @@ from fxor import flexibility_fxor
 from stressors import stress_scenarios
 from Evaluate_scenario import run_scenario
 import os
+import pandapower.converter as pc
+import simbench as sb
+import pandapower as pp
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
-    # "GBreducednetwork": pn.GBreducednetwork,
-    # "case118": pn.case118,
-    # "case14": pn.case14,
-    # "case24_ieee_rts": pn.case24_ieee_rts,
-    # "case30": pn.case30,
-    # "case33bw": pn.case33bw,
-    # "case39": pn.case39,
-    # "case5": pn.case5,
-    # "case6ww": pn.case6ww,
-    # "case9": pn.case9,
-    # "create_cigre_network_lv": pn.create_cigre_network_lv,
-    # "create_cigre_network_mv": pn.create_cigre_network_mv,
-    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
-    # "create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
+    "GBreducednetwork": pn.GBreducednetwork,
+    "case118": pn.case118,
+    "case14": pn.case14,
+    "case24_ieee_rts": pn.case24_ieee_rts,
+    "case30": pn.case30,
+    "case33bw": pn.case33bw,
+    "case39": pn.case39,
+    "case5": pn.case5,
+    "case6ww": pn.case6ww,
+    "case9": pn.case9,
+    "create_cigre_network_lv": pn.create_cigre_network_lv,
+    #"create_cigre_network_mv": pn.create_cigre_network_mv,
+    #"create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    "create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
 
     # Special Cases with Adjustments
-    "mv_all_high10": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=10),
-    "mv_all_high5": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=5)
+    # "mv_all_high10": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=10),
+    # "mv_all_high5": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=5),
+
+    "example_multivoltage": lambda: increase_line_limits(pn.example_multivoltage(), 1.5),
+    "example_simple": lambda: increase_line_limits(pn.example_simple(), 1.5),
+    "mv_oberrhein": lambda: increase_line_limits(pn.mv_oberrhein(), 1.5),
+
+    # # High-voltage grids
+    "1-HV-mixed--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--0-sw"), 1.5),
+    # "1-HV-mixed--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--1-sw"), 1.5),
+    # "1-HV-urban--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--0-sw"), 1.5),
+    # "1-HV-urban--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--1-sw"), 1.5),
+    #
+    # # Low-voltage grids
+    "1-LV-rural1--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural1--0-sw"), 1.5),
+    # "1-LV-rural2--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural2--0-sw"), 1.5),
+    # "1-LV-rural2--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural2--1-sw"), 1.5),
+    # "1-LV-rural2--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural2--2-sw"), 1.5),
+    # "1-LV-rural3--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural3--0-sw"), 1.5),
+    "1-LV-rural3--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural3--1-sw"), 1.5),
+    # "1-LV-rural3--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural3--2-sw"), 1.5),
+    # "1-LV-semiurb4--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb4--0-sw"), 1.5),
+    # "1-LV-semiurb4--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb4--1-sw"), 1.5),
+    # "1-LV-semiurb4--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb4--2-sw"), 1.5),
+    # "1-LV-semiurb5--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb5--0-sw"), 1.5),
+    # "1-LV-semiurb5--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb5--1-sw"), 1.5),
+    # "1-LV-semiurb5--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb5--2-sw"), 1.5),
+    # "1-LV-urban6--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--0-sw"), 1.5),
+    # "1-LV-urban6--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--1-sw"), 1.5),
+    # "1-LV-urban6--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--2-sw"), 1.5),
+
+    # Medium-voltage grids (not already added)
+    "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
+    # "1-MV-comm--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--1-sw"), 1.5),
+    # "1-MV-comm--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--2-sw"), 1.5),
+    # "1-MV-rural--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--0-sw"), 1.5),
+    # "1-MV-rural--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--1-sw"), 1.5),
+    # "1-MV-rural--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--2-sw"), 1.5),
+    "1-MV-semiurb--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-semiurb--0-sw"), 1.5),
+    # "1-MV-semiurb--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-semiurb--1-sw"), 1.5),
+    # "1-MV-semiurb--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-semiurb--2-sw"), 1.5),
+    # "1-MV-urban--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--0-sw"), 1.5),
+    # "1-MV-urban--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--1-sw"), 1.5),
+    # "1-MV-urban--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--2-sw"), 1.5),
+    #
+    # # MVLV grids – Combined medium and low voltage
+     "1-MVLV-comm-3.403-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-0-no_sw"), 1.5),
+    # #"1-MVLV-comm-3.403-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-0-sw"), 1.5),
+    # "1-MVLV-comm-3.403-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-1-no_sw"), 1.5),
+    # #"1-MVLV-comm-3.403-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-1-sw"), 1.5),
+    # "1-MVLV-comm-3.403-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-2-no_sw"), 1.5),
+    # #"1-MVLV-comm-3.403-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-2-sw"), 1.5),
+    # "1-MVLV-comm-4.416-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-0-no_sw"), 1.5),
+    # #"1-MVLV-comm-4.416-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-0-sw"), 1.5),
+    # "1-MVLV-comm-4.416-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-1-no_sw"), 1.5),
+    # #"1-MVLV-comm-4.416-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-1-sw"), 1.5),
+    # "1-MVLV-comm-4.416-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-2-no_sw"), 1.5),
+    # #"1-MVLV-comm-4.416-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-2-sw"), 1.5),
+    # "1-MVLV-comm-5.401-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-0-no_sw"), 1.5),
+    # #"1-MVLV-comm-5.401-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-0-sw"), 1.5),
+    # "1-MVLV-comm-5.401-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-1-no_sw"), 1.5),
+    # #"1-MVLV-comm-5.401-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-1-sw"), 1.5),
+    # "1-MVLV-comm-5.401-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-2-no_sw"), 1.5),
+    # #"1-MVLV-comm-5.401-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-2-sw"), 1.5),
+    # "1-MVLV-comm-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-all-0-no_sw"), 1.5),
+    # #"1-MVLV-comm-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-all-0-sw"), 1.5),
+    #
+    # "1-MVLV-rural-1.108-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-1.108-0-no_sw"), 1.5),
+    # #"1-MVLV-rural-1.108-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-1.108-0-sw"), 1.5),
+    #
+     "1-MVLV-rural-2.107-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"), 1.5),
+    # #"1-MVLV-rural-2.107-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-sw"), 1.5),
+    # "1-MVLV-rural-2.107-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-1-no_sw"), 1.5),
+    # #"1-MVLV-rural-2.107-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-1-sw"), 1.5),
+    # "1-MVLV-rural-2.107-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-2-no_sw"), 1.5),
+    # #"1-MVLV-rural-2.107-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-2-sw"), 1.5),
+    # "1-MVLV-rural-4.101-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-0-no_sw"), 1.5),
+    # #"1-MVLV-rural-4.101-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-0-sw"), 1.5),
+    # "1-MVLV-rural-4.101-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-1-no_sw"), 1.5),
+    # #"1-MVLV-rural-4.101-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-1-sw"), 1.5),
+    # "1-MVLV-rural-4.101-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-2-no_sw"), 1.5),
+    # #"1-MVLV-rural-4.101-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-2-sw"), 1.5),
+    # "1-MVLV-rural-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-all-0-no_sw"), 1.5),
+    # #"1-MVLV-rural-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-all-0-sw"), 1.5),
+    #
+    # "1-MVLV-semiurb-3.202-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-3.202-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-sw"), 1.5),
+    # "1-MVLV-semiurb-3.202-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-1-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-3.202-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-1-sw"), 1.5),
+    # "1-MVLV-semiurb-3.202-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-2-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-3.202-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-2-sw"), 1.5),
+    # "1-MVLV-semiurb-4.201-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-0-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-4.201-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-0-sw"), 1.5),
+    # "1-MVLV-semiurb-4.201-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-1-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-4.201-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-1-sw"), 1.5),
+    # "1-MVLV-semiurb-4.201-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-2-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-4.201-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-2-sw"), 1.5),
+    # "1-MVLV-semiurb-5.220-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-0-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-5.220-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-0-sw"), 1.5),
+    # "1-MVLV-semiurb-5.220-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-1-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-5.220-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-1-sw"), 1.5),
+    # "1-MVLV-semiurb-5.220-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-2-no_sw"),
+    #                                                              1.5),
+    # #"1-MVLV-semiurb-5.220-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-2-sw"), 1.5),
+    # "1-MVLV-semiurb-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-all-0-no_sw"), 1.5),
+    # #"1-MVLV-semiurb-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-all-0-sw"), 1.5),
+    #
+    # # Urban MVLV grids
+     "1-MVLV-urban-5.303-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"), 1.5),
+    # #"1-MVLV-urban-5.303-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-sw"), 1.5),
+    # "1-MVLV-urban-5.303-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-1-no_sw"), 1.5),
+    # #"1-MVLV-urban-5.303-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-1-sw"), 1.5),
+    # "1-MVLV-urban-5.303-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-2-no_sw"), 1.5),
+    # #"1-MVLV-urban-5.303-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-2-sw"), 1.5),
+    # "1-MVLV-urban-6.305-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-0-no_sw"), 1.5),
+    # #"1-MVLV-urban-6.305-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-0-sw"), 1.5),
+    # "1-MVLV-urban-6.305-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-1-no_sw"), 1.5),
+    # #"1-MVLV-urban-6.305-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-1-sw"), 1.5),
+    # "1-MVLV-urban-6.305-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-2-no_sw"), 1.5),
+    # #"1-MVLV-urban-6.305-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-2-sw"), 1.5),
+    # "1-MVLV-urban-6.309-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-0-no_sw"), 1.5),
+    # #"1-MVLV-urban-6.309-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-0-sw"), 1.5),
+    # "1-MVLV-urban-6.309-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-1-no_sw"), 1.5),
+    # #"1-MVLV-urban-6.309-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-1-sw"), 1.5),
+    # "1-MVLV-urban-6.309-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-2-no_sw"), 1.5),
+    # #"1-MVLV-urban-6.309-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-2-sw"), 1.5),
+    # "1-MVLV-urban-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-0-no_sw"), 1.5),
+    # #"1-MVLV-urban-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-0-sw"), 1.5),
+    # "1-MVLV-urban-all-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-1-no_sw"), 1.5),
+    # #"1-MVLV-urban-all-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-1-sw"), 1.5),
+    # "1-MVLV-urban-all-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-2-no_sw"), 1.5),
+    # "1-MVLV-urban-all-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-2-sw"), 1.5),
+
+    # local saved grids
+    "caseIEEE37_DG": lambda: use_local_grid("caseIEEE37_DG.m")
 }
+
 
 # Function to increase generation and storage capacities
 def increase_generation(net, factor):
@@ -55,19 +201,40 @@ def increase_generation(net, factor):
     for idx, gen in net.gen.iterrows():
         net.gen.at[idx, 'p_mw'] *= factor
         net.gen.at[idx, 'q_mvar'] *= factor
-        net.gen.at[idx, 'sn_mva'] = np.sqrt(net.gen.at[idx, 'p_mw']**2 + net.gen.at[idx, 'q_mvar']**2)
+        net.gen.at[idx, 'sn_mva'] = np.sqrt(net.gen.at[idx, 'p_mw'] ** 2 + net.gen.at[idx, 'q_mvar'] ** 2)
 
     # 2. Increase for sgen (verteilte Erzeugung)
     for idx, sgen in net.sgen.iterrows():
         net.sgen.at[idx, 'p_mw'] *= factor
         net.sgen.at[idx, 'q_mvar'] *= factor
-        net.sgen.at[idx, 'sn_mva'] = np.sqrt(net.sgen.at[idx, 'p_mw']**2 + net.sgen.at[idx, 'q_mvar']**2)
+        net.sgen.at[idx, 'sn_mva'] = np.sqrt(net.sgen.at[idx, 'p_mw'] ** 2 + net.sgen.at[idx, 'q_mvar'] ** 2)
 
     # 3. Increase for storage (Speicher)
     for idx, storage in net.storage.iterrows():
         net.storage.at[idx, 'p_mw'] *= factor
         net.storage.at[idx, 'q_mvar'] *= factor
-        net.storage.at[idx, 'sn_mva'] = np.sqrt(net.storage.at[idx, 'p_mw']**2 + net.storage.at[idx, 'q_mvar']**2)
+        net.storage.at[idx, 'sn_mva'] = np.sqrt(net.storage.at[idx, 'p_mw'] ** 2 + net.storage.at[idx, 'q_mvar'] ** 2)
+
+    return net
+
+
+def increase_line_limits(net, factor):
+
+    print(f"Increase line limits by Factor {factor}.")
+
+    # 🔹 **Reduce Line & Transformer Losses**
+    net.line["max_i_ka"] *= 1.5  # increase line limits by 50 %
+
+    if "max_loading_percent" in net.line.columns:
+        # Set a default loading percent for all lines (e.g., 100%)
+        net.line["max_loading_percent"] *= 1.5
+
+    return net
+
+def use_local_grid(grid_name):
+    TESTGRID_PATH = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Testnetze"
+    file_path = os.path.join(TESTGRID_PATH, grid_name)
+    net = pc.from_mpc(file_path, casename_m="caseIEEE37_DG")
 
     return net
 
@@ -80,7 +247,7 @@ basic = {
 selected_indicators = {
     "all": False,
     "Self Sufficiency": True,
-    "show_self_sufficiency_at_bus": True,
+    "show_self_sufficiency_at_bus": False,
     "System Self Sufficiency": False,
     "Generation Shannon Evenness": True,
     "Generation Variety": True,
@@ -107,14 +274,14 @@ selected_indicators = {
 selected_scenario = {
     "stress_scenario": True,
     "all": False,
-    "Flood": {"active": True, "runs": 50},
+    "Flood": {"active": False, "runs": 50},
     "Earthquake": {"active": True, "runs": 50},
     "Dunkelflaute": {"active": True, "runs": 5},
     "Storm": {"active": True, "runs": 50},
     "Fire": {"active": False, "runs": 20},
     "Line Overload": {"active": False, "runs": 10},
     "IT-Attack": {"active": False, "runs": 20},
-    "Geopolitical_chp": {"active": True, "runs": 5},
+    "Geopolitical_gas": {"active": True, "runs": 5},
     "Geopolitical_h2": {"active": True, "runs": 5},
     "high_EE_generation": {"active": False, "runs": 20},
     "high_load": {"active": True, "runs": 20},
@@ -123,18 +290,16 @@ selected_scenario = {
     "output_excel": True
 }
 
+
 # Main Function
 def run_analysis_for_single_grid(grid_name):
-
     dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
-    dfinalresults = add_indicator(dfinalresults, grid_name , 0)
+    dfinalresults = add_indicator(dfinalresults, grid_name, 0)
 
     dfresultsscenario = pd.DataFrame()
     dfresultsscenario = add_indicator(dfresultsscenario, grid_name, 0)
-
-
 
     # Select and create the grid dynamically
     if grid_name in grids:
@@ -146,26 +311,33 @@ def run_analysis_for_single_grid(grid_name):
         # Count elements and scaled elements
         element_counts = count_elements(net)
         # Print both counts in one row
-        # print(net)
-        print("Voltage Limits:")
+        print(net)
 
-        print("External Grid Settings:")
-        print(net.ext_grid)
+        print(net.bus)
+        print(net.trafo)
+        print(net.line)
 
         # print("Generators:")
-        # print(net.gen)
-        # print(net.sgen)
-        # print(net.storage)
+        print(net.gen)
+        print(net.sgen)
+        print(net.storage)
 
-        print("Element Type    | Original Count |")
-        print("-" * 20)
-        for element_type in element_counts["original_counts"]:
-            original_count = element_counts["original_counts"][element_type]
-            print(f"{element_type.capitalize():<12}    | {original_count:<12} ")
 
     if basic["Adjustments"]:
-        net, required_p_mw, required_q_mvar = determine_minimum_ext_grid_power(net)
-        net = set_missing_limits(net, required_p_mw, required_q_mvar)
+        net = set_missing_limits(net)
+
+
+    if net.bus_geodata.empty:
+        selected_scenario["Flood"]["active"] = False
+        dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 0)
+
+    if net.trafo.empty:
+        selected_scenario["sabotage_trafo"]["active"] = False
+        dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 0)
+
+    if net.sgen[net.sgen["type"].str.contains("fuel cell", case=False, na=False)].empty:
+        selected_scenario["Geopolitical_h2"]["active"] = False
+        dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 0)
 
     if selected_indicators["all"]:
         # Setze alle anderen Indikatoren auf True
@@ -176,7 +348,7 @@ def run_analysis_for_single_grid(grid_name):
     if selected_indicators["Self Sufficiency"]:
         # Calculate generation factors
         generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
-        indi_selfsuff = float(selfsuff(net,generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
+        indi_selfsuff = float(selfsuff(net, generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
         dfinalresults = add_indicator(dfinalresults, 'Self Sufficiency At Bus Level', indi_selfsuff)
 
     if selected_indicators["System Self Sufficiency"]:
@@ -184,7 +356,8 @@ def run_analysis_for_single_grid(grid_name):
         indi_selfsuff_neu = selfsufficiency_neu(netsa)
         dfinalresults = add_indicator(dfinalresults, 'Self Sufficiency System', indi_selfsuff_neu)
 
-    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Line Shannon Evenness"] or selected_indicators["Load Shannon Evenness"]:
+    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Line Shannon Evenness"] or \
+            selected_indicators["Load Shannon Evenness"]:
         # Define the maximum known types for each component
         max_known_types = {
             'generation': 8,
@@ -218,7 +391,6 @@ def run_analysis_for_single_grid(grid_name):
         if selected_indicators["Line Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
 
-
     if selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"]:
         evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load,
                                                                                                 max_known_types['load'])
@@ -228,7 +400,9 @@ def run_analysis_for_single_grid(grid_name):
         if selected_indicators["Load Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
 
-    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"] or selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"] or selected_indicators["Line Shannon Evenness"] or selected_indicators["Line Variety"]:
+    if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"] or \
+            selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"] or selected_indicators[
+        "Line Shannon Evenness"] or selected_indicators["Line Variety"]:
         # Calculate averages if lists are not empty
         if evenness_values:
             avg_evenness = sum(evenness_values) / len(evenness_values)
@@ -380,14 +554,13 @@ def run_analysis_for_single_grid(grid_name):
         # Ergebnis in DataFrame speichern
         dfinalresults = add_indicator(dfinalresults, 'Redundancy N-3', rate)
 
-
     if selected_indicators["Redundancy"]:
         Lastfluss, n2_Redundanz, kombi, component_indicators, red_results = Redundancy(net)
         dfinalresults = add_indicator(dfinalresults, "Redundancy Loadflow", Lastfluss)
         dfinalresults = add_indicator(dfinalresults, "Redundancy N-2", n2_Redundanz)
         dfinalresults = add_indicator(dfinalresults, "Redundancy Average", kombi)
 
-        #dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
+        # dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
         # Ausgabe der Indikatoren pro Komponente:
         print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
         for comp, inds in component_indicators.items():
@@ -408,9 +581,12 @@ def run_analysis_for_single_grid(grid_name):
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility Grid Reserves', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Critical Lines', dflexiresults.loc[dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility Average', dflexiresults.loc[dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Grid Reserves', dflexiresults.loc[
+            dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Critical Lines', dflexiresults.loc[
+            dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Average', dflexiresults.loc[
+            dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
 
     if selected_indicators["Buffer"]:
         Speicher = calculate_buffer(net)
@@ -418,17 +594,14 @@ def run_analysis_for_single_grid(grid_name):
 
     if selected_indicators["Flexibility_fxor"]:
         Flex_fxor = flexibility_fxor(net, False)
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility fFeasible operating region', Flex_fxor)
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Feasible Operating Region', Flex_fxor)
 
     if selected_indicators["n_3_redundancy_print"]:
         print("Results of N-3 Redundancy")
         for element_type, counts in n3_redundancy_results.items():
-            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")    
+            print(f"{element_type.capitalize()} - Success count: {counts['Success']}, Failed count: {counts['Failed']}")
     if selected_indicators["show_spider_plot"]:
         plot_spider_chart(dfinalresults)
-    if selected_indicators["print_results"]:
-        print("Results for Indicators:")
-        print(dfinalresults)
 
     if not dfinalresults.empty:
         # Separate the first and last row
@@ -440,6 +613,9 @@ def run_analysis_for_single_grid(grid_name):
         # Recombine everything
         dfinalresults = pd.concat([first_row, middle_rows], ignore_index=True)
 
+    if selected_indicators["print_results"]:
+        print("Results for Indicators:")
+        print(dfinalresults)
 
     if selected_scenario["stress_scenario"]:
 
@@ -490,7 +666,8 @@ def run_analysis_for_single_grid(grid_name):
                 scenario_average_value = dfresultsscenario["Value"].iloc[1:].mean()  # Exclude the first row
 
             # Add the average as a new row
-            dfresultsscenario = add_indicator(dfresultsscenario, "Overall Scenario Resilience Score", scenario_average_value)
+            dfresultsscenario = add_indicator(dfresultsscenario, "Overall Scenario Resilience Score",
+                                              scenario_average_value)
             if selected_scenario["print_results"]:
                 print(dfresultsscenario)
 
@@ -508,14 +685,17 @@ def run_analysis_for_single_grid(grid_name):
             if selected_indicators["output_excel"]:
                 dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
 
-def run_all_grids():
+
+def run_all_grids(start_time):
     """
     Loops over the grids dictionary and runs the above 'run_analysis_for_single_grid' on each.
     """
     for grid_name in grids:
-        print(f"\n--- Running analysis for grid: {grid_name} at time.time()---")
+        timer = start_time - time.time()
+        print(f"\n--- Running analysis for grid: {grid_name} at {timer}---")
 
         run_analysis_for_single_grid(grid_name)
+
 
 def main():
     """
@@ -523,15 +703,17 @@ def main():
     """
     # Optionally, you can decide whether to process all grids or just one,
     # e.g. based on some config or command line argument
+    start_time = time.time()
     process_all = True  # or read from config/CLI
 
     if process_all:
-        run_all_grids()
+        run_all_grids(start_time)
         # do final post-processing, exporting, etc.
     else:
         # Suppose your config says to just run the 'case30' grid
-        grid_name = "mv_all_high10"
+        grid_name = "caseIEEE37_DG"
         run_analysis_for_single_grid(grid_name)
+
 
 if __name__ == '__main__':
     main()

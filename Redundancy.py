@@ -143,9 +143,7 @@ def is_graph_connected(net_temp_red, out_of_service_elements):
                         switch_exists = True
 
                         # Prüfen, ob der Switch geschlossen und in_service ist und NICHT in out_of_service_elements
-                        if (not sw.closed or
-                            not sw.in_service or
-                            sw_id in out_of_service_elements.get('switch', [])):
+                        if (not sw.closed or not sw.get('in_service', True) or sw_id in out_of_service_elements.get('switch', [])):
                             switch_closed = False
                         break
 
