@@ -32,14 +32,14 @@ def Redundancy(net_temp_red3):
     # Ergebnisse in lf_resultsb speichern:
     lf_resultsb = {}
     # Auswertung der Auslastungen:
-    lf_resultsb["line"] = analyze_loading(net_temp_red3.res_line[['loading_percent']], "Leitungen")
-    lf_resultsb["trafo"] = analyze_loading(net_temp_red3.res_trafo[['loading_percent']], "Transformatoren")
+    lf_resultsb["line"] = analyze_loading(net_temp_red3.line[['loading_percent']], "Leitungen")
+    lf_resultsb["trafo"] = analyze_loading(net_temp_red3.trafo[['loading_percent']], "Transformatoren")
 
     # Busspannungsauswertung:
-    lf_resultsb["bus"] = analyze_buses(net_temp_red3.res_bus[['vm_pu']])
+    lf_resultsb["bus"] = analyze_buses(net_temp_red3.bus[['vm_pu']])
 
     # Erzeugeranalyse (Generator-Pmax aus net_temp_red3.gen):
-    lf_resultsb["gen"] = analyze_components_gen(net_temp_red3.res_gen[['p_mw']], net_temp_red3.gen[['max_p_mw']], net_temp_red3.sgen[['p_mw']], net_temp_red3.sgen[['max_p_mw']], net_temp_red3.storage[['p_mw']], net_temp_red3.storage[['max_p_mw']])
+    lf_resultsb["gen"] = analyze_components_gen(net_temp_red3.gen[['p_mw']], net_temp_red3.gen[['max_p_mw']], net_temp_red3.sgen[['p_mw']], net_temp_red3.sgen[['max_p_mw']], net_temp_red3.storage[['p_mw']], net_temp_red3.storage[['max_p_mw']])
 
     # Ordentliche, formatierte Ausgabe:
     print("Ergebnisse der Lastflussanalyse:\n" + "-" * 40)
