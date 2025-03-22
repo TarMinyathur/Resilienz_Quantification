@@ -7,12 +7,13 @@ import pandapower.networks as pn
 from concurrent.futures import ProcessPoolExecutor
 import time
 import random
+from itertools import islice
 
 "Aufgrund der CPU-lastigen Natur der OPF-Berechnungen würde man ohne GIL-Freigabe der Libraries eindeutig zum ProcessPoolExecutor greifen. Falls deine numerischen Routinen aber tatsächlich den GIL freigeben (was sehr oft der Fall ist), können Threads einen guten Kompromiss aus geringerem Overhead und echter Parallelität darstellen."
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
-def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout):
+def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout, max_calls=250):
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type: {element_type}")
 
@@ -32,10 +33,10 @@ def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout):
     should_stop = False
 
     # Process the selected element type in parallel
-    with ProcessPoolExecutor(max_workers=4) as executor:
+    with ProcessPoolExecutor(max_workers=3) as executor:
         futures = []
 
-        for triple in element_triples_gen:
+        for triple in islice(element_triples_gen, max_calls):
             if should_stop:
                 break
 

@@ -55,20 +55,20 @@ basic_codes = []
 # EHV
 #basic_codes.extend([f"1-EHV-mixed--{sc}-sw" for sc in scenarios])
 # HV (2 variants)
-# basic_codes.extend([f"1-HV-mixed--{sc}-sw" for sc in scenarios])
-# basic_codes.extend([f"1-HV-urban--{sc}-sw" for sc in scenarios])
+basic_codes.extend([f"1-HV-mixed--{sc}-sw" for sc in scenarios])
+basic_codes.extend([f"1-HV-urban--{sc}-sw" for sc in scenarios])
 # # MV (4 variants)
-# basic_codes.extend([f"1-MV-rural--{sc}-sw" for sc in scenarios])
+basic_codes.extend([f"1-MV-rural--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-MV-semiurb--{sc}-sw" for sc in scenarios])
-# basic_codes.extend([f"1-MV-urban--{sc}-sw" for sc in scenarios])
-# basic_codes.extend([f"1-MV-comm--{sc}-sw" for sc in scenarios])
+basic_codes.extend([f"1-MV-urban--{sc}-sw" for sc in scenarios])
+basic_codes.extend([f"1-MV-comm--{sc}-sw" for sc in scenarios])
 # # LV (6 variants)
 # basic_codes.extend([f"1-LV-rural1--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-LV-rural2--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-LV-rural3--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-LV-semiurb4--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-LV-semiurb5--{sc}-sw" for sc in scenarios])
-basic_codes.extend([f"1-LV-urban6--{sc}-sw" for sc in scenarios])
+#basic_codes.extend([f"1-LV-urban6--{sc}-sw" for sc in scenarios])
 
 
 
@@ -126,8 +126,8 @@ test_grids = [
     # ----------------------------------------------------------------------------
     # Example pandapower Networks (shipped with pandapower)
     # ----------------------------------------------------------------------------
-    ("example_simple", pn.example_simple),
-    ("example_multivoltage", pn.example_multivoltage),
+    #("example_simple", pn.example_simple),
+    #("example_multivoltage", pn.example_multivoltage),
 
     # Neue Einträge für gefundene *.m Dateien (nur falls MATPOWER-kompatibel):
     #("casePGE69BUS", load_case_pge69bus),
@@ -159,7 +159,7 @@ test_grids = [
     # ----------------------------------------------------------------------------
     # MV Oberrhein (built into pandapower)
     # ----------------------------------------------------------------------------
-    ("mv_oberrhein", pn.mv_oberrhein),
+    #("mv_oberrhein", pn.mv_oberrhein),
 
     # ----------------------------------------------------------------------------
     # Built-in MATPOWER Cases (transmission & a few radial distribution)
@@ -260,7 +260,7 @@ all_codes = sb.collect_all_simbench_codes()
 #print("Found MV+LV codes:", mv_lv_codes)
 
 # # Filter for combined HV+MV codes that only contain HV and MV (not extra levels)
-# hv_mv_codes = [code for code in all_codes if code.startswith("1-HVMV-")]
+hv_mv_codes = [code for code in all_codes if code.startswith("1-HVMV-")]
 #
 # # Filter for combined MV+LV codes that only contain MV and LV (not extra levels)
 # mv_lv_codes = [code for code in all_codes if code.startswith("1-MVLV-")]
@@ -268,9 +268,9 @@ all_codes = sb.collect_all_simbench_codes()
 # print("Found HV+MV codes:", hv_mv_codes)
 # print("Found MV+LV codes:", mv_lv_codes)
 
-# # Append these codes to the test_grids list:
-# for code in hv_mv_codes + mv_lv_codes:
-#     test_grids.append((code, lambda code=code: sb.get_simbench_net(code)))
+# Append these codes to the test_grids list:
+for code in hv_mv_codes: #+ mv_lv_codes:
+    test_grids.append((code, lambda code=code: sb.get_simbench_net(code)))
 #
 # # Append these MV+LV codes to your test_grids list
 # for code in mv_lv_codes:

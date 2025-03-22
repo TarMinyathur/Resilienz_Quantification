@@ -130,10 +130,10 @@ def scenarios(net_temp_stress, selected_scenarios):
 # geo_data optional, if no defined -> set False, see Class Scenario
 def get_scenarios():
     return [
-        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 1), random_select=True),
+        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.5), random_select=True),
         Scenario("earthquake", mode="component",
-                 targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(2,6)),
-                 reduction_rate=random.uniform(0.3, 1),
+                 targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(1,6)),
+                 reduction_rate=random.uniform(0.3, 0.7),
                  random_select=True),
         Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(0, 0.15)),
         Scenario("storm", mode="component",

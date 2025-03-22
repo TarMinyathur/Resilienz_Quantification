@@ -5,7 +5,7 @@ import matplotlib.patches as mpatches
 import os
 import numpy as np
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-
+from matplotlib.lines import Line2D
 
 def remove_multicollinearity_vif(X, threshold=10.0):
     """
@@ -155,6 +155,10 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         plot_regression(model_ols, szenario, X_n.columns, output_dir, excluded_info)
         save_summary(model_ols, szenario, output_dir)
 
+    # Ausgabe der zusammengefassten Ergebnisse in der Konsole
+    print("\nTabellarische Zusammenfassung der Ergebnisse:")
+    print(df_results.to_string())
+
     # Excel Export am Ende
     export_path = os.path.join(output_dir, "regression_results.xlsx")
     df_results.to_excel(export_path)
@@ -167,76 +171,59 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     params_score = model_ols.params
     conf_score = model_ols.conf_int()
     p_values = model_ols.pvalues
+
+    # Entferne den Intercept (const)
     params_score_no_intercept = params_score.drop('const')
     conf_score_no_intercept = conf_score.drop('const')
     p_values_no_intercept = p_values.drop('const')
 
     ind_names = params_score_no_intercept.index
     coef_vals = params_score_no_intercept.values
-    lower_error = coef_vals - conf_score_no_intercept[0]
-    upper_error = conf_score_no_intercept[1] - coef_vals
+    lower_error = coef_vals - conf_score_no_intercept[0].values
+    upper_error = conf_score_no_intercept[1].values - coef_vals
 
-    # Sternchen + Farben für signifikante Koeffizienten
+    # Erstelle Labels: Füge bei signifikanter Variable (*) hinzu
     ind_labels = []
-    colors = []
-    for ind, val, pval in zip(ind_names, coef_vals, p_values_no_intercept):
+    for ind, pval in zip(ind_names, p_values_no_intercept):
         label = f"{ind}*" if pval < 0.05 else ind
         ind_labels.append(label)
-        colors.append('green' if val > 0 else 'red')
 
     # Custom X-Positionen mit mehr Abstand
     x_pos = np.arange(0, len(ind_names) * 2, 2)  # z.B. Abstand von 2 Einheiten statt 1
 
     plt.figure(figsize=(12, 8))
-    plt.bar(x_pos, coef_vals,
-            yerr=[lower_error, upper_error],
-            capsize=5, color=colors)
+    # Statt Balken zeichnen wir einzelne Punkte (x) mit Fehlerbalken
+    for i, (x, coef, low_err, up_err, pval) in enumerate(zip(x_pos, coef_vals, lower_error, upper_error, p_values_no_intercept)):
+        color = 'green' if coef > 0 else 'red'
+        plt.errorbar(x, coef, yerr=[[low_err], [up_err]], fmt='x', markersize=10, color=color, capsize=5)
 
-    # X-Achse hinzufügen
     plt.xticks(x_pos, ind_labels, rotation=45, ha="right")
     plt.axhline(y=0, color='grey', linewidth=0.5, linestyle="-")  # Horizontale Linie bei y=0 als Referenz
 
-    plt.title(f"Coefficients and 95% Confidence Interval: {szenario}")
+    plt.title(f"Regression Coefficients and 95% Confidence Intervals: {szenario}")
     plt.xlabel("Indicators", labelpad=10)
-    plt.gca().xaxis.set_label_coords(0.5, 0.05)  # x=0.5 centers it, y positive moves it inside the plot
+    plt.gca().xaxis.set_label_coords(0.5, 0.05)
     plt.ylabel("Regression Coefficient")
 
-    # Add legend
-    legend_patches = [
-        mpatches.Patch(color='green', label='Positive Coefficient'),
-        mpatches.Patch(color='red', label='Negative Coefficient'),
-        mpatches.Patch(facecolor='white', label='* = significant at p < 0.05'),
-        mpatches.Patch(facecolor='white', label='VIF = Variance Inflation Factor')
-    ]
-    plt.legend(handles=legend_patches, loc='lower center', bbox_to_anchor=(0.5, -0.5),
-               ncol=3, frameon=False)
+    # Legende erstellen
+    positive_marker = Line2D([0], [0], marker='x', color='green', linestyle='None', markersize=10, label='Positive Koeffizienten')
+    negative_marker = Line2D([0], [0], marker='x', color='red', linestyle='None', markersize=10, label='Negative Koeffizienten')
+    significance_note = Line2D([0], [0], marker='None', color='none', label='* = signifikant (p < 0.05)')
+    plt.legend(handles=[positive_marker, negative_marker, significance_note],
+               loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
 
-    # Fix: mehr Platz unten reservieren!
-    plt.subplots_adjust(bottom=0.3, right=0.7)
-
-    # 3) Box mit den ausgeschlossenen Variablen + VIF-Werten
-    # Falls kein Indikator ausgeschlossen wurde, kann man was anderes schreiben, z.B. "Keine excl."
+    # Platz für ausgeschlossene Variablen (VIF-Info)
     if len(excluded_info) > 0:
         box_text = "Excluded (VIF > 10):\n"
         for col_name, vif_val in excluded_info:
             box_text += f"  - {col_name}: VIF={vif_val:.2f}\n"
     else:
-        box_text = "No indicators excluded (all VIF <= 20)"
-
-    # Box-Style
+        box_text = "Keine Indikatoren ausgeschlossen (alle VIF <= 10)"
     props = dict(boxstyle='round', facecolor='white', alpha=0.8, ec='black')
+    plt.gca().text(1.02, 0.95, box_text, transform=plt.gca().transAxes,
+                   verticalalignment='top', fontsize=9, bbox=props)
 
-    # Text in der rechten oberen Ecke platzieren
-    # transform=plt.gca().transAxes => Koordinaten [0,0]..[1,1] relativ zum Achsenbereich
-    plt.gca().text(
-        1.02, 0.95, box_text,
-        transform=plt.gca().transAxes,
-        verticalalignment='top',
-        fontsize=9,
-        bbox=props
-    )
-
-    # plt.tight_layout()
+    plt.subplots_adjust(bottom=0.3, right=0.7)
 
     plot_path = os.path.join(output_dir, f"regression_{szenario}.png")
     plt.savefig(plot_path, dpi=400)
@@ -254,17 +241,16 @@ def save_summary(model_ols, szenario, output_dir):
 # --------------------------
 
 def main():
-    # Path to the single Excel file containing both sheets
+    # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
     excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final.xlsx"
 
-    # Define the output directory (unchanged)
+    # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
 
-    # Read each worksheet into a separate DataFrame
+    # Lese die beiden Arbeitsblätter in separate DataFrames
     df_indikatoren = pd.read_excel(excel_file, sheet_name="Indikatoren_final")
     df_szenarien = pd.read_excel(excel_file, sheet_name="Stressoren_final")
 
-    # df_indikatoren, df_szenarien = lade_daten(indikatoren_path, szenarien_path)
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
 
     indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]

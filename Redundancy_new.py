@@ -7,6 +7,8 @@ from concurrent.futures import ProcessPoolExecutor
 import time
 from Redundancy import is_graph_connected
 import random
+import pandapower.networks as pn
+from itertools import islice
 
 # Schwellenwerte definieren
 CRITICAL_THRESHOLD = 90  # in Prozent, z. B. für Leitungen und Transformatoren
@@ -21,7 +23,7 @@ Lastfluss und Redundanz werden dabei gleich gewichtet; im Lastfluss fließen sow
 als auch der Anteil kritischer Elemente ein.
 """
 
-def Redundancy(net_temp_red3):
+def Redundancy(net_temp_red3, max_calls):
     # # Beispielnetz erstellen (IEEE 9-Bus-System)
 
     # Lastflussberechnung durchführen
@@ -32,14 +34,14 @@ def Redundancy(net_temp_red3):
     # Ergebnisse in lf_resultsb speichern:
     lf_resultsb = {}
     # Auswertung der Auslastungen:
-    lf_resultsb["line"] = analyze_loading(net_temp_red3.line[['loading_percent']], "Leitungen")
-    lf_resultsb["trafo"] = analyze_loading(net_temp_red3.trafo[['loading_percent']], "Transformatoren")
+    lf_resultsb["line"] = analyze_loading(net_temp_red3.res_line[['loading_percent']], "Leitungen")
+    lf_resultsb["trafo"] = analyze_loading(net_temp_red3.res_trafo[['loading_percent']], "Transformatoren")
 
     # Busspannungsauswertung:
-    lf_resultsb["bus"] = analyze_buses(net_temp_red3.bus[['vm_pu']])
+    lf_resultsb["bus"] = analyze_buses(net_temp_red3.res_bus[['vm_pu']])
 
     # Erzeugeranalyse (Generator-Pmax aus net_temp_red3.gen):
-    lf_resultsb["gen"] = analyze_components_gen(net_temp_red3.gen[['p_mw']], net_temp_red3.gen[['max_p_mw']], net_temp_red3.sgen[['p_mw']], net_temp_red3.sgen[['max_p_mw']], net_temp_red3.storage[['p_mw']], net_temp_red3.storage[['max_p_mw']])
+    lf_resultsb["gen"] = analyze_components_gen(net_temp_red3.res_gen[['p_mw']], net_temp_red3.gen[['max_p_mw']], net_temp_red3.res_sgen[['p_mw']], net_temp_red3.sgen[['max_p_mw']], net_temp_red3.res_storage[['p_mw']], net_temp_red3.storage[['max_p_mw']])
 
     # Ordentliche, formatierte Ausgabe:
     print("Ergebnisse der Lastflussanalyse:\n" + "-" * 40)
@@ -61,7 +63,7 @@ def Redundancy(net_temp_red3):
     # Über alle relevanten Elementtypen iterieren
     for element_type in element_types:
         start_time = time.time()
-        results = n_2_redundancy_check(net_temp_red3, start_time, element_type, timeout)
+        results = n_2_redundancy_check(net_temp_red3, start_time, element_type, timeout, max_calls)
         n2_redundancy_results[element_type] = results[element_type]
 
         # Summiere die Ergebnisse
@@ -302,7 +304,7 @@ Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.
 """
 
 
-def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout):
+def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout, max_calls=250):
     """Überprüft die N-2-Redundanz für verschiedene Netzkomponenten."""
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type for n_2 redundancy: {element_type}")
@@ -323,10 +325,10 @@ def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout):
     should_stop_n2 = False
 
     # Parallelisierung der Netzberechnungen
-    with ProcessPoolExecutor(max_workers=4) as executor:
+    with ProcessPoolExecutor(max_workers=3) as executor:
         futures = []
 
-        for pairs in element_pairs_gen:
+        for pairs in islice(element_pairs_gen, max_calls):
             if should_stop_n2:
                 break
 
@@ -388,3 +390,7 @@ def process_pair(element_type, pair, net_temp_red2):
     except Exception as e:
         #print(f"Fehler bei {element_type} mit Paar {pair}: {e}")
         return element_type, "Failed"
+
+if __name__ == "__main__":
+    net_temp_stress = pn.create_cigre_network_mv(with_der="all")
+    red = Redundancy(net_temp_stress)
