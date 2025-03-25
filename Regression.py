@@ -50,11 +50,14 @@ def lade_daten(indikatoren_path, szenarien_path):
 
 
 def preprocess_data(df_indikatoren, df_szenarien):
-    df_merged = pd.merge(df_indikatoren, df_szenarien, on="Netz", how="inner")
+    df_filtered_szenario = df_szenarien[~(df_szenarien.drop(columns="Netz").fillna(0) == 0).all(axis=1)]
+    # Die Angabe how="inner" bei pd.merge(...). Ein Inner Join behält nur Zeilen mit übereinstimmendem Schlüssel in beiden DataFrames.
+    df_merged = pd.merge(df_indikatoren, df_filtered_szenario, on="Netz", how="inner", suffixes=("", "_szenario"))
     df_merged.replace(["", " "], pd.NA, inplace=True)
     for col in df_merged.columns:
         if col != "Netz":
             df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce')
+
     if df_merged.isnull().values.any():
         print("Warnung: Fehlende Werte gefunden. Ersetze mit Spaltenmittelwerten.")
         df_merged.fillna(df_merged.mean(numeric_only=True), inplace=True)
@@ -210,7 +213,7 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     negative_marker = Line2D([0], [0], marker='x', color='red', linestyle='None', markersize=10, label='Negative Koeffizienten')
     significance_note = Line2D([0], [0], marker='None', color='none', label='* = signifikant (p < 0.05)')
     plt.legend(handles=[positive_marker, negative_marker, significance_note],
-               loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
+               loc='lower center', bbox_to_anchor=(0.5, -0.5), ncol=3, frameon=False)
 
     # Platz für ausgeschlossene Variablen (VIF-Info)
     if len(excluded_info) > 0:
