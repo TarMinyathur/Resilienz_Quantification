@@ -62,8 +62,8 @@ def get_flexible_loads(net_buff, buffer_sum):
             return buffer_sum
         flexible_loads = net_buff.load[net_buff.load["controllable"] == True]
 
-        private_loads = flexible_loads[flexible_loads["type"] == "private"]["p_mw"].sum() * 1.0  # 100% flexible
-        business_loads = flexible_loads[flexible_loads["type"] == "business"]["p_mw"].sum() * 0.15  # 15% flexible
+        private_loads = flexible_loads[flexible_loads["type"] == "private"]["p_mw"].sum() * 1.0  # 100 % flexible
+        business_loads = flexible_loads[flexible_loads["type"] == "business"]["p_mw"].sum() * 0.15  # 15 % flexible
 
         if private_loads > 0:
             buffer_sum.append({"type": "private load flexibility", "capacity": private_loads})

@@ -139,9 +139,9 @@ def plot_net(net_temp_geo, x_start, y_start, side_length):
         rect = Rectangle((x_start, y_start), side_length, side_length, linewidth=2, edgecolor="red", facecolor="none", label="Destruction Area")
         ax.add_patch(rect)
         ax.set_aspect('equal')      # to guarantee axis equality
-        ax.set_xlabel("X Coordinate")
-        ax.set_ylabel("Y Coordinate")
-        ax.set_title("net Visualization with Destruction Area")
+        # ax.set_xlabel("X Coordinate")
+        # ax.set_ylabel("Y Coordinate")
+        ax.set_title("Georeferenced Destruction Area")
         ax.legend()
         plt.show()
 
@@ -228,7 +228,7 @@ def geo_referenced_destruction(net_temp_geo, reduction_rate, random_select):
     return net_temp_geo
 
 if __name__ == "__main__":
-    net_temp_geo = pn.create_cigre_net_temp_geowork_mv(with_der="all")
+    net_temp_geo = pn.create_cigre_net_mv(with_der="all")
 
     reduction_rate = 0.3
      # Select a region to "destroy" (either random or predefined)
