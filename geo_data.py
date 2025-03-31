@@ -31,8 +31,10 @@ def get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reducti
     if x_coords and y_coords:
         x_min, x_max = min(x_coords), max(x_coords)
         y_min, y_max = min(y_coords), max(y_coords)
+
+        # print(f"xmin: {x_min}, xmax: {x_max}, y_min: {y_min}, ymax: {y_max}")
         
-        # Calculate the bounding box area
+        # Calculate the destroyed area
         area = (x_max - x_min) * (y_max - y_min)
         area_destroyed = area * reduction_rate
         side_length = np.sqrt(area_destroyed)  # Square root to get a square-like area
@@ -42,8 +44,10 @@ def get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reducti
 
     if random_select:
         # Select a random x and y range
-        x_start = np.random.uniform(x_min, x_max - side_length)
-        y_start = np.random.uniform(y_min, y_max - side_length)
+        x_start = np.random.uniform(x_min - side_length, x_max) # - side_length)
+        # x_start = x_min - side_length # for testing if edge bus is affected -> yes :)
+        y_start = np.random.uniform(y_min - side_length, y_max) # - side_length)
+        # print(f"xstart: {x_start}, ystart: {y_start}")
     else:
         # Fixed selection: take the bottom-left quarter of the net_temp_geowork
         x_start = x_min
@@ -61,8 +65,7 @@ def get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reducti
 
     print(f"Buses to be disabled: {list(buses_to_disable)}")
 
-    return buses_to_disable, x_start, y_start, side_length
-
+    return buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length
 def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select, reduction_rate):
     if not x_coords or not y_coords:
         # No data, bail out
@@ -123,7 +126,7 @@ def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select,
     return buses_to_disable, flood_center_x, flood_center_y, flood_radius
 
 
-def plot_net(net_temp_geo, x_start, y_start, side_length):
+def plot_net(net_temp_geo, x_min, x_start, x_max, y_min, y_start, y_max, side_length):
     # Visualize the net_temp_geowork
     fig, ax = plt.subplots(figsize=(10, 8))
     
@@ -141,10 +144,45 @@ def plot_net(net_temp_geo, x_start, y_start, side_length):
         ax.set_aspect('equal')      # to guarantee axis equality
         # ax.set_xlabel("X Coordinate")
         # ax.set_ylabel("Y Coordinate")
+        plt.xlim(x_min-side_length, x_max+side_length)
+        plt.ylim(y_min-side_length, y_max+side_length)
         ax.set_title("Georeferenced Destruction Area")
         ax.legend()
-        plt.show()
 
+def plot_area(net_temp_geo, x_min, x_max, y_min, y_max, side_length):
+    fig, ax = plt.subplots(figsize=(10, 8))
+    import matplotlib.patches as patches
+    # Flächen als Rechtecke zeichnen
+    area_rect = patches.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min, 
+                                  edgecolor='black', facecolor='gray', alpha=0.3, label='Net Area')
+    target_rect = patches.Rectangle((x_min - side_length, y_min - side_length), ((x_max+side_length)-x_min),(y_max+side_length)-y_min,
+                                    edgecolor='green', facecolor='gray', alpha=0.3, hatch='/', label='Possible Target Area')
+    destructed_rect = patches.Rectangle((x_min - side_length, y_min - side_length), 
+                                        (x_max + side_length) - (x_min - side_length), 
+                                        (y_max + side_length) - (y_min - side_length),
+                                        edgecolor='red', facecolor='blue', alpha=0.1, hatch='X', label='Possible Destruction Area')
+
+    ax.add_patch(area_rect)
+    ax.add_patch(target_rect)
+    ax.add_patch(destructed_rect)
+    
+    # Beschriftung der Flächen
+    # ax.text((x_min + x_max) / 2, (y_min + y_max) / 2, 'Total Area', fontsize=12, color='black', ha='center', va='center')
+    # ax.text((x_min + x_max - side_length) / 2, (y_min + y_max - side_length) / 2, 'Target Area', fontsize=12, color='black', ha='center', va='center')
+    # ax.text((x_min + x_max + side_length) / 2, (y_min + y_max + side_length) / 2, 'Destruction Area', fontsize=12, color='black', ha='center', va='center')
+
+    # Busse plotten
+    if not net_temp_geo.bus_geodata.empty:
+        ax.scatter(net_temp_geo.bus_geodata["x"], net_temp_geo.bus_geodata["y"], c="blue", s=50, label="Buses")
+        for idx, row in net_temp_geo.bus_geodata.iterrows():
+            ax.text(row["x"], row["y"], str(idx), fontsize=9, color='black', ha='right', va='bottom')
+    
+    ax.set_aspect('equal')
+    ax.set_xlim(x_min - side_length, x_max + side_length)
+    ax.set_ylim(y_min - side_length, y_max + side_length)
+    ax.set_title("Georeferenced Destruction Area")
+    ax.legend()
+    plt.show()
 
 
 def components_to_disable_static(net_temp_geo, buses_to_disable):
@@ -218,23 +256,27 @@ def geo_referenced_destruction(net_temp_geo, reduction_rate, random_select):
     x_coords, y_coords = get_geodata_coordinates(net_temp_geo)
 
 
-    #buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reduction_rate)
-    buses_to_disable, x_start, y_start, side_length = get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords,random_select, reduction_rate)
+    buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length = get_buses_to_disable(net_temp_geo, x_coords,y_coords, random_select, reduction_rate)
+    # buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length = get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords,random_select, reduction_rate)
 
-    plot_net(net_temp_geo, x_start, y_start, side_length)
+    plot_net(net_temp_geo,x_min, x_start,x_max, y_min, y_start, y_max, side_length)
+    plot_area(net_temp_geo,x_min,x_max, y_min, y_max, side_length)
     # net_temp_geo = components_to_disable_static(net_temp_geo, buses_to_disable)
     net_temp_geo = components_to_disable_dynamic(net_temp_geo, buses_to_disable)
     
     return net_temp_geo
 
 if __name__ == "__main__":
-    net_temp_geo = pn.create_cigre_net_mv(with_der="all")
+    net_temp_geo = pn.create_cigre_network_mv(with_der="all")
 
-    reduction_rate = 0.3
+    reduction_rate = 0.1
      # Select a region to "destroy" (either random or predefined)
     random_select = True  # Set to False for a fixed region
 
-    net_temp_geo = geo_referenced_destruction(net_temp_geo, reduction_rate, random_select)
+    n = 1
+    for _ in range(n):
+        net_temp_geo = geo_referenced_destruction(net_temp_geo, reduction_rate, random_select)
+    plt.show()
 
 
 
