@@ -244,7 +244,8 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
         net_temp_disp.trafo['hv_bus'] = 0
 
     # Check if net_temp_disp.bus contains the required geodata columns
-    if not {'bus_id', 'x', 'y'}.issubset(net_temp_disp.bus.columns):
+    print(net_temp_disp.bus)
+    if net_temp_disp.bus_geodata.empty:
         print("Warning: net_temp_disp.bus does not contain 'bus_id', 'x', and 'y' columns. Setting geodata to 0 for all buses.")
         # Create an empty DataFrame or a default mapping where every bus gets geodata of 0
         # If bus_id exists in net_temp_disp.bus, use it; otherwise, assume an empty mapping.
@@ -254,7 +255,8 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
         else:
             bus_geo = pd.DataFrame({'x': [], 'y': []})
     else:
-        bus_geo = net_temp_disp.bus.set_index('bus_id')[['x', 'y']]
+       bus_geo = net_temp_disp.bus_geodata[['x', 'y']]  # Falls bus_id als Index bereits existiert
+
 
     # Map transformer high-voltage bus IDs to their coordinates
     # Use .get to handle missing bus entries safely (default to 0)

@@ -25,7 +25,7 @@ from stressors import stress_scenarios
 from Evaluate_scenario import run_scenario
 import os
 import pandapower.converter as pc
-import simbench as sb
+# import simbench as sb
 import pandapower as pp
 
 # Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
@@ -35,14 +35,14 @@ grids = {
     # "case14": pn.case14,
     # "case24_ieee_rts": pn.case24_ieee_rts,
     # "case30": pn.case30,
-    # "case33bw": pn.case33bw,
+    "case33bw": pn.case33bw,
     # "case39": pn.case39,
     # "case5": pn.case5,
     # "case6ww": pn.case6ww,
-    # "case9": pn.case9,
+    "case9": pn.case9,
     # "create_cigre_network_lv": pn.create_cigre_network_lv,
     # # #"create_cigre_network_mv": pn.create_cigre_network_mv,
-    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
     # # #"create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
     # #
@@ -217,7 +217,7 @@ grids = {
     # #"1-MVLV-urban-all-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-2-sw"), 1.5),
 
     # local saved grids
-    "caseIEEE37_DG": lambda: use_local_grid("caseIEEE37_DG.m")
+    # "caseIEEE37_DG": lambda: use_local_grid("caseIEEE37_DG.m")
 }
 
 
@@ -274,47 +274,47 @@ basic = {
 
 selected_indicators = {
     "all": False,
-    "Self Sufficiency": True,
+    "Self Sufficiency": False,
     "show_self_sufficiency_at_bus": False,
     "System Self Sufficiency": False,
-    "Generation Shannon Evenness": True,
-    "Generation Variety": True,
-    "Line Shannon Evenness": True,
-    "Line Variety": True,
-    "Load Shannon Evenness": True,
-    "Load Variety": True,
-    "Disparity Generators": True,
-    "Disparity Loads": True,
-    "Disparity Transformers": True,
-    "Disparity Lines": True,
-    "N-3 Redundancy": True,
+    "Generation Shannon Evenness": False,
+    "Generation Variety": False,
+    "Line Shannon Evenness": False,
+    "Line Variety": False,
+    "Load Shannon Evenness": False,
+    "Load Variety": False,
+    "Disparity Generators": False,
+    "Disparity Loads": False,
+    "Disparity Transformers": False,
+    "Disparity Lines": False,
+    "N-3 Redundancy": False,
     "n_3_redundancy_print": False,
-    "Redundancy": True,
-    "GraphenTheorie": True,
-    "Flexibility": True,
-    "Flexibility_fxor": True,
-    "Buffer": True,
+    "Redundancy": False,
+    "GraphenTheorie": False,
+    "Flexibility": False,
+    "Flexibility_fxor": False,
+    "Buffer": False,
     "show_spider_plot": False,
-    "print_results": True,
+    "print_results": False,
     "output_excel": True
 }
 
 selected_scenario = {
     "stress_scenario": True,
-    "all": False,
-    "Flood": {"active": False, "runs": 100},
-    "Earthquake": {"active": True, "runs": 100},
-    "Dunkelflaute": {"active": True, "runs": 10},
-    "Storm": {"active": True, "runs": 100},
+    "all": True,
+    "Flood": {"active": True, "runs": 10},
+    "Earthquake": {"active": False, "runs": 10},
+    "Dunkelflaute": {"active": False, "runs": 10},
+    "Storm": {"active": False, "runs": 10},
     "Fire": {"active": False, "runs": 20},
     "Line Overload": {"active": False, "runs": 10},
     "IT-Attack": {"active": False, "runs": 20},
-    "Geopolitical_gas": {"active": True, "runs": 10},
-    "Geopolitical_h2": {"active": True, "runs": 10},
+    "Geopolitical_gas": {"active": False, "runs": 10},
+    "Geopolitical_h2": {"active": False, "runs": 10},
     "high_EE_generation": {"active": False, "runs": 25},
-    "high_load": {"active": True, "runs": 25},
-    "sabotage_trafo": {"active": True, "runs": 20},
-    "print_results": True,
+    "high_load": {"active": False, "runs": 25},
+    "sabotage_trafo": {"active": False, "runs": 20},
+    "print_results": False,
     "output_excel": True
 }
 
@@ -702,7 +702,7 @@ def run_analysis_for_single_grid(grid_name):
     if selected_scenario["output_excel"] or selected_indicators.get("output_excel"):
         # Output-Dateiname basierend auf grid_name
         output_filename = f'Ergebnisse_{grid_name}.xlsx'
-        output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
+        output_dir = r"C:\\Users\\ann82611\\ownCloud\\U-Platte\\03_Code\\energy_policy"
         output_path = os.path.join(output_dir, output_filename)
 
         # ExcelWriter verwenden, um mehrere Sheets in eine Datei zu schreiben
@@ -739,7 +739,7 @@ def main():
         # do final post-processing, exporting, etc.
     else:
         # Suppose your config says to just run the 'case30' grid
-        grid_name = "caseIEEE37_DG"
+        grid_name = "create_cigre_network_mv_all"
         run_analysis_for_single_grid(grid_name)
 
 
