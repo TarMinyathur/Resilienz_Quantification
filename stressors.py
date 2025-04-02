@@ -100,7 +100,7 @@ class Scenario:
             elif self.mode == "geo":
                 # net_temp_stress = geo_referenced_destruction(net_temp_stress, self.reduction_rate, self.random_select)
                 x_coords, y_coords = get_geodata_coordinates(net_temp_stress)
-                buses_to_disable, x_start, y_start, side_length = get_buses_to_disable(net_temp_stress, x_coords,
+                buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length = get_buses_to_disable(net_temp_stress, x_coords,
                                                                                        y_coords, self.random_select,
                                                                                        self.reduction_rate)
                 # plot_net(net_temp_stress, x_start, y_start, side_length) # plot function for visual control!
