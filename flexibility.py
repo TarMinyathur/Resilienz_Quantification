@@ -10,9 +10,10 @@ def calculate_flexibility(net_flex):
     dflexresults = pd.DataFrame(columns=['Indicator', 'Value'])
     flex2 = calculate_net_flexwork_reserve(net_flex)
     dflexresults = add_indicator(dflexresults, 'Flex Netzreserve', flex2)
-    flex4 = calculate_loadflow_reserve(net_flex)
+    flex4_normed, flex4 = calculate_loadflow_reserve(net_flex)
+    dflexresults = add_indicator(dflexresults, 'Flex Reserve krit Leitungen scaled', flex4_normed)
     dflexresults = add_indicator(dflexresults, 'Flex Reserve krit Leitungen', flex4)
-    flex_index= (flex2 + flex4) / 2
+    flex_index= (flex2 + flex4_normed) / 2
     dflexresults = add_indicator(dflexresults, 'Flexibilität Gesamt', flex_index)
 
     return dflexresults
@@ -41,7 +42,9 @@ def calculate_loadflow_reserve(net_flexd):
     S_max[S_max == 0] = 1e-6  # Verhindere Division durch Null
 
     # Aktuelle Belastung
-    S_current = np.sqrt(net_flexd.res_line.p_from_mw**2 + net_flexd.res_line.q_from_mvar**2)
+    p = net_flexd.res_line.p_from_mw.fillna(0)
+    q = net_flexd.res_line.q_from_mvar.fillna(0)
+    S_current = np.sqrt(p ** 2 + q ** 2)
 
     # Berechnung der Reserve
     reserve = S_max - S_current
@@ -49,21 +52,15 @@ def calculate_loadflow_reserve(net_flexd):
     # Kritische Leitungen finden (z.B. jene mit mehr als 80% Auslastung)
     critical_lines = S_current / S_max > 0.8
 
-    # Durchschnittliche freie Reserve auf kritischen Leitungen
-    if np.sum(critical_lines) > 0:
-        avg_reserve = np.mean(reserve[critical_lines])
-    else:
-        avg_reserve = np.mean(reserve)  # Falls keine Engpässe vorhanden sind, gesamte Reserve nutzen
+    critical_reserves = reserve[critical_lines]
 
-    # Normierung: Maximale Summe aller freien Kapazitäten
-    max_possible_reserve = np.sum(S_max)
+    # Durchschnittliche Reserve berechnen
+    avg_reserve = np.mean(critical_reserves) if len(critical_reserves) > 0 else np.mean(reserve)
 
-    if max_possible_reserve > 0:
-        flex_index = avg_reserve / max_possible_reserve
-    else:
-        flex_index = 0  # Falls keine sinnvolle Reserve existiert, Flexibilität = 0 setzen
+    # Normierung
+    flex_index = avg_reserve / np.sum(S_max[critical_lines]) if avg_reserve > 0 else 0
 
-    # Begrenzung auf den Wertebereich [0,1]
+    # Begrenzung auf [0,1]
     flex_index = max(0, min(1, flex_index))
 
-    return flex_index
+    return flex_index, avg_reserve

@@ -33,4 +33,4 @@ def calculate_shannon_evenness_and_variety(data, max_known_types):
     max_variety = max_known_types
     variety_scaled = variety / max_variety
 
-    return shannon_evenness, variety, variety_scaled, max_variety
+    return shannon_evenness, variety, variety_scaled, max_variety, shannon_entropy

@@ -216,8 +216,8 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
     Calculate the disparity matrix and maximum integral disparity value for transformer characteristics.
 
     Args:
-        net_temp_disp (object): net_temp_dispwork object containing transformer DataFrame with relevant columns.
-        debug (bool): If True, print debug information. Default is False.
+        net_temp_disp (object): net_temp_dispwork object containing transformer and bus DataFrames.
+        debug (bool): If True, print debug information.
 
     Returns:
         tuple: disparity_df (pd.DataFrame), max_integral_value (float)
@@ -225,7 +225,7 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
 
     # Ensure that transformer has the required columns
     required_columns = ['sn_mva', 'vn_hv_kv', 'vn_lv_kv', 'vkr_percent',
-                        'vk_percent', 'pfe_kw', 'i0_percent', 'shift_degree']
+                        'vk_percent', 'pfe_kw', 'i0_percent', 'shift_degree', 'hv_bus', 'lv_bus']
     for column in required_columns:
         if column not in net_temp_disp.trafo.columns:
             raise ValueError(f"Ensure that '{column}' column exists in net_temp_disp.trafo")
@@ -234,43 +234,25 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
     for column in required_columns:
         net_temp_disp.trafo[column] = pd.to_numeric(net_temp_disp.trafo[column], errors='coerce').fillna(0)
 
-    # *** Incorporate Bus Geodata ***
-    # Assuming net_temp_disp.bus should contain columns: 'bus_id', 'x', 'y'
-    # And net_temp_disp.trafo should have a column 'hv_bus' that corresponds to bus IDs.
-
-    # Check for 'hv_bus' in net_temp_disp.trafo. If missing, set a default value.
-    if 'hv_bus' not in net_temp_disp.trafo.columns:
-        print("Warning: 'hv_bus' column missing in net_temp_disp.trafo. Defaulting to 0 for all entries.")
-        net_temp_disp.trafo['hv_bus'] = 0
-
-    # Check if net_temp_disp.bus contains the required geodata columns
-    if not {'bus_id', 'x', 'y'}.issubset(net_temp_disp.bus.columns):
-        print("Warning: net_temp_disp.bus does not contain 'bus_id', 'x', and 'y' columns. Setting geodata to 0 for all buses.")
-        # Create an empty DataFrame or a default mapping where every bus gets geodata of 0
-        # If bus_id exists in net_temp_disp.bus, use it; otherwise, assume an empty mapping.
-        if 'bus_id' in net_temp_disp.bus.columns:
-            bus_ids = net_temp_disp.bus['bus_id']
-            bus_geo = pd.DataFrame({'x': 0, 'y': 0}, index=bus_ids)
-        else:
-            bus_geo = pd.DataFrame({'x': [], 'y': []})
+    # Get bus geodata
+    if not {'x', 'y'}.issubset(net_temp_disp.bus_geodata.columns):
+        print("Warning: net_temp_disp.bus_geodata does not contain 'x' and 'y' columns. Setting all geodata to 0.")
+        bus_geo = pd.DataFrame({'x': [0], 'y': [0]}, index=[-1])  # dummy fallback
     else:
-        bus_geo = net_temp_disp.bus.set_index('bus_id')[['x', 'y']]
+        bus_geo = net_temp_disp.bus_geodata[['x', 'y']]
 
-    # Map transformer high-voltage bus IDs to their coordinates
-    # Use .get to handle missing bus entries safely (default to 0)
-    net_temp_disp.trafo['geo_x'] = net_temp_disp.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'x'] if b in bus_geo.index else 0)
-    net_temp_disp.trafo['geo_y'] = net_temp_disp.trafo['hv_bus'].map(lambda b: bus_geo.at[b, 'y'] if b in bus_geo.index else 0)
+    # Map geo_x and geo_y to transformers via hv_bus
+    net_temp_disp.trafo['geo_x'] = net_temp_disp.trafo['hv_bus'].map(
+        lambda b: bus_geo.at[b, 'x'] if b in bus_geo.index else 0)
+    net_temp_disp.trafo['geo_y'] = net_temp_disp.trafo['hv_bus'].map(
+        lambda b: bus_geo.at[b, 'y'] if b in bus_geo.index else 0)
 
     if debug:
-        print("\nDebug: Transformer Data After Cleaning and Adding Bus Geodata")
-        print(net_temp_disp.trafo[[*required_columns, 'hv_bus', 'geo_x', 'geo_y']].head())
+        print("\nDebug: Transformer Data After Cleaning and Adding HV Bus Geodata")
+        print(net_temp_disp.trafo[[*required_columns, 'geo_x', 'geo_y']].head())
 
     # Combine numerical and geographic features
     trafo_data = net_temp_disp.trafo[required_columns + ['geo_x', 'geo_y']].copy()
-
-    if debug:
-        print("\nDebug: Transformer Data After Cleaning")
-        print(trafo_data.head())
 
     # Vectorized Disparity Matrix Calculation
     n = len(trafo_data)
@@ -285,11 +267,9 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
     # Maximum Disparity and Integral Calculation
     max_values = trafo_data.max()
     max_disparity = np.sqrt(np.sum(max_values ** 2))
+    max_integral_value = max(epsilon, (n * (n - 1) / 2) * max_disparity)
 
-    max_integral_value = (n * (n - 1) / 2) * max_disparity
-    max_integral_value = max(epsilon, max_integral_value)
-
-    # Clean up: remove added geodata columns from net_temp_disp.trafo to preserve original structure
+    # Clean up: remove added geo_x and geo_y
     net_temp_disp.trafo.drop(columns=['geo_x', 'geo_y'], inplace=True, errors='ignore')
 
     return disparity_df, max_integral_value

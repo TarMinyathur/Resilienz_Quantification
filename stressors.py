@@ -100,9 +100,7 @@ class Scenario:
             elif self.mode == "geo":
                 # net_temp_stress = geo_referenced_destruction(net_temp_stress, self.reduction_rate, self.random_select)
                 x_coords, y_coords = get_geodata_coordinates(net_temp_stress)
-                buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length = get_buses_to_disable(net_temp_stress, x_coords,
-                                                                                       y_coords, self.random_select,
-                                                                                       self.reduction_rate)
+                buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length = get_buses_to_disable(net_temp_stress, x_coords, y_coords, self.random_select, self.reduction_rate)
                 # plot_net(net_temp_stress, x_start, y_start, side_length) # plot function for visual control!
                 # net_temp_stress = components_to_disable_static(net_temp_stress, buses_to_disable)
                 net_temp_stress = components_to_disable_dynamic(net_temp_stress, buses_to_disable)
@@ -130,7 +128,7 @@ def scenarios(net_temp_stress, selected_scenarios):
 # geo_data optional, if no defined -> set False, see Class Scenario
 def get_scenarios():
     return [
-        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.4), random_select=True),
+        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.5), random_select=True),
         Scenario("earthquake", mode="component",
                  targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(1,6)),
                  reduction_rate=random.uniform(0.3, 0.7),
@@ -171,7 +169,7 @@ def stress_scenarios(net_temp_stress, selected_scenarios):
 if __name__ == "__main__":
     net_temp_stress = pn.create_cigre_network_mv(with_der="all")
     # net_temp_stress = pn.create_cigre_network_hv(length_km_6a_6b=0.1)
-    selected_scenarios = ["flood"]
+    selected_scenarios = ["flood", "earthquake", "storm", "sabotage_trafo", "dunkelflaute"]
 
     net_temp_stress_stress = stress_scenarios(net_temp_stress, selected_scenarios)
     # for scenario_name, stressed_net in net_temp_stress_stress:

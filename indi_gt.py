@@ -4,18 +4,18 @@ import networkx as nx
 from initialize import add_indicator
 from networkx.algorithms import community
 
-def GraphenTheorieIndicator(Graph, dfinalresults, printing= False):
+def GraphenTheorieIndicator(graph, dfinalresults, printing= False):
 
 
     # Now calculate average shortest path length for the largest connected component
-    if Graph.number_of_nodes() > 1:
-        avg_path_length = nx.average_shortest_path_length(Graph)
+    if graph.number_of_nodes() > 1:
+        avg_path_length = nx.average_shortest_path_length(graph)
         print(f"Average Shortest Path Length: {avg_path_length}")
     else:
-        print("Graph has only one node, cannot calculate average shortest path length.")
+        print("graph has only one node, cannot calculate average shortest path length.")
 
     # calculating of a way to normalize the average shortest path length
-    num_nodes = Graph.number_of_nodes()
+    num_nodes = graph.number_of_nodes()
     num_nodes = (num_nodes - 1) if num_nodes > 1 else 0
     norm_avg_pl = max(0, 1 - (avg_path_length / num_nodes))
     #print(f"Datatype of norm_avg_pl: {type(norm_avg_pl)}")
@@ -23,7 +23,7 @@ def GraphenTheorieIndicator(Graph, dfinalresults, printing= False):
     dfinalresults = add_indicator(dfinalresults, 'Average Shortest Path Length', norm_avg_pl)
 
     # Calculate degree centrality
-    degree_centrality = nx.degree_centrality(Graph)
+    degree_centrality = nx.degree_centrality(graph)
 
     # Calculate average degree centrality
     avg_degree_centrality = sum(degree_centrality.values()) / len(degree_centrality)
@@ -38,10 +38,10 @@ def GraphenTheorieIndicator(Graph, dfinalresults, printing= False):
     dfinalresults = add_indicator(dfinalresults, 'Average Degree Centrality', max(0, avg_degree_centrality))
 
     # Detect communities (optional): Using Louvain method
-    communities = community.greedy_modularity_communities(Graph)
+    communities = community.greedy_modularity_communities(graph)
 
     # Calculate modularity index
-    modularity_index = calculate_modularity_index(Graph, communities)
+    modularity_index = calculate_modularity_index(graph, communities)
 
     print(f"Modularity Index (Q): {modularity_index}")
 

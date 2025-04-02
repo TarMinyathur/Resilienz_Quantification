@@ -48,7 +48,7 @@ def flexibility_fxor (net_flex, visualize):
         plt.legend()
         plt.show()
     
-    return flexibility
+    return flexibility, sum_area_polygons
 
 # -------------------------------------------------------------------------
 # Helper: device_polygon

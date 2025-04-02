@@ -17,7 +17,7 @@ def calculate_buffer(net_buff):
     buffer_ratio = (total_buffer_capacity / total_load) if total_load > 0 else 0  # to discuss value for buffer
     print(f"Buffer: {buffer_ratio:.4f}")
 
-    return buffer_ratio
+    return buffer_ratio, total_buffer_capacity
 
 
 def check_battery_capacity(net_buff, buffer_sum):

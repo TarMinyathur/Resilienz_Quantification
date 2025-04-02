@@ -42,7 +42,7 @@ grids = {
     # "case9": pn.case9,
     # "create_cigre_network_lv": pn.create_cigre_network_lv,
     # # #"create_cigre_network_mv": pn.create_cigre_network_mv,
-    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+     "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
     # # #"create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
     # #
@@ -55,7 +55,7 @@ grids = {
     # # "mv_oberrhein": lambda: increase_line_limits(pn.mv_oberrhein(), 1.5),
     # #
     # # # # High-voltage grids
-    # # "1-HV-mixed--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--0-sw"), 1.5),
+    #"1-HV-mixed--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--0-sw"), 1.5),
     # # "1-HV-mixed--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--1-sw"), 1.5),
     # # "1-HV-urban--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--0-sw"), 1.5),
     # # "1-HV-urban--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--1-sw"), 1.5),
@@ -79,7 +79,7 @@ grids = {
     # # "1-LV-urban6--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--2-sw"), 1.5),
     # #
     # # # Medium-voltage grids (not already added)
-    # # "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
+    "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
     # # "1-MV-comm--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--1-sw"), 1.5),
     # # "1-MV-comm--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--2-sw"), 1.5),
     # # "1-MV-rural--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--0-sw"), 1.5),
@@ -217,7 +217,7 @@ grids = {
     # #"1-MVLV-urban-all-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-2-sw"), 1.5),
 
     # local saved grids
-    "caseIEEE37_DG": lambda: use_local_grid("caseIEEE37_DG.m")
+    #"caseIEEE37_DG": lambda: use_local_grid("caseIEEE37_DG.m")
 }
 
 
@@ -276,7 +276,7 @@ selected_indicators = {
     "all": False,
     "Self Sufficiency": True,
     "show_self_sufficiency_at_bus": False,
-    "System Self Sufficiency": False,
+    "System Self Sufficiency": True,
     "Generation Shannon Evenness": True,
     "Generation Variety": True,
     "Line Shannon Evenness": True,
@@ -302,7 +302,7 @@ selected_indicators = {
 selected_scenario = {
     "stress_scenario": True,
     "all": False,
-    "Flood": {"active": False, "runs": 100},
+    "Flood": {"active": True, "runs": 100},
     "Earthquake": {"active": True, "runs": 100},
     "Dunkelflaute": {"active": True, "runs": 10},
     "Storm": {"active": True, "runs": 100},
@@ -320,7 +320,7 @@ selected_scenario = {
 
 
 # Main Function
-def run_analysis_for_single_grid(grid_name):
+def run_analysis_for_single_grid(grid_name, timeras):
     dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
@@ -378,11 +378,13 @@ def run_analysis_for_single_grid(grid_name):
         generation_factors = calculate_generation_factors(net, "Fraunhofer ISE (2024)")
         indi_selfsuff = float(selfsuff(net, generation_factors, selected_indicators["show_self_sufficiency_at_bus"]))
         dfinalresults = add_indicator(dfinalresults, 'Self Sufficiency At Bus Level', indi_selfsuff)
+        # Prozentzahl, keine Normierung notwendig
 
     if selected_indicators["System Self Sufficiency"]:
         netsa = net.deepcopy()
         indi_selfsuff_neu = selfsufficiency_neu(netsa)
         dfinalresults = add_indicator(dfinalresults, 'Self Sufficiency System', indi_selfsuff_neu)
+        # Prozentzahl, keine Normierung notwendig
 
     if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Line Shannon Evenness"] or \
             selected_indicators["Load Shannon Evenness"]:
@@ -401,32 +403,38 @@ def run_analysis_for_single_grid(grid_name):
 
     if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"]:
         generation_data = pd.concat([net.sgen, net.gen, net.storage], ignore_index=True)
-        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(generation_data,
+        evenness, variety, variety_scaled, max_variety, evenness_entropy = calculate_shannon_evenness_and_variety(generation_data,
                                                                                                 max_known_types[
                                                                                                     'generation'])
         evenness_values.append(evenness)
         variety_values.append(variety_scaled)
-        dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness)
+        dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness_entropy)
+        dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness scaled", evenness)
         if selected_indicators["Generation Variety"]:
-            dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety_scaled)
+            dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety)
+            dfinalresults = add_indicator(dfinalresults, "Generation Variety scaled", variety_scaled)
 
     if selected_indicators["Line Shannon Evenness"] or selected_indicators["Line Variety"]:
-        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.line,
+        evenness, variety, variety_scaled, max_variety, evenness_entropy = calculate_shannon_evenness_and_variety(net.line,
                                                                                                 max_known_types['line'])
         evenness_values.append(evenness)
         variety_values.append(variety_scaled)
-        dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness)
+        dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness_entropy)
+        dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness scaled", evenness)
         if selected_indicators["Line Variety"]:
-            dfinalresults = add_indicator(dfinalresults, "Line Variety", variety_scaled)
+            dfinalresults = add_indicator(dfinalresults, "Line Variety", variety)
+            dfinalresults = add_indicator(dfinalresults, "Line Variety scaled", variety_scaled)
 
     if selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"]:
-        evenness, variety, variety_scaled, max_variety = calculate_shannon_evenness_and_variety(net.load,
+        evenness, variety, variety_scaled, max_variety, evenness_entropy = calculate_shannon_evenness_and_variety(net.load,
                                                                                                 max_known_types['load'])
         evenness_values.append(evenness)
         variety_values.append(variety_scaled)
-        dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
+        dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness_entropy)
+        dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness scaled", evenness)
         if selected_indicators["Load Variety"]:
-            dfinalresults = add_indicator(dfinalresults, "Load Variety", variety_scaled)
+            dfinalresults = add_indicator(dfinalresults, "Load Variety", variety)
+            dfinalresults = add_indicator(dfinalresults, "Load Variety scaled", variety_scaled)
 
     if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"] or \
             selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"] or selected_indicators[
@@ -434,11 +442,11 @@ def run_analysis_for_single_grid(grid_name):
         # Calculate averages if lists are not empty
         if evenness_values:
             avg_evenness = sum(evenness_values) / len(evenness_values)
-            dfinalresults = add_indicator(dfinalresults, "Shannon Evenness Average", avg_evenness)
+            dfinalresults = add_indicator(dfinalresults, "Shannon Evenness Average scaled", avg_evenness)
 
         if variety_values:
             avg_variety = sum(variety_values) / len(variety_values)
-            dfinalresults = add_indicator(dfinalresults, "Variety Average", avg_variety)
+            dfinalresults = add_indicator(dfinalresults, "Variety Average scaled", avg_variety)
 
     if selected_indicators["GraphenTheorie"]:
         # Create an empty NetworkX graph
@@ -513,7 +521,8 @@ def run_analysis_for_single_grid(grid_name):
         integral_value_gen = disparity_df_gen.values.sum()
         ratio_gen = integral_value_gen / max_integral_gen
         ddisparity = add_disparity(ddisparity, 'Generators', integral_value_gen, max_integral_gen, ratio_gen)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Generators', ratio_gen)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Generators', integral_value_gen)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Generators scaled', ratio_gen)
         disparity_values.append(ratio_gen)
 
     if selected_indicators["Disparity Loads"]:
@@ -521,7 +530,8 @@ def run_analysis_for_single_grid(grid_name):
         integral_value_load = disparity_df_load.values.sum()
         ratio_load = integral_value_load / max_integral_load
         ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load, ratio_load)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Loads', ratio_load)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Loads', integral_value_load)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Loads scaled', ratio_load)
         disparity_values.append(ratio_load)
 
     if selected_indicators["Disparity Transformers"]:
@@ -535,7 +545,8 @@ def run_analysis_for_single_grid(grid_name):
             ratio_trafo = integral_value_trafo / max_int_trafo
             ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, ratio_trafo)
 
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers', ratio_trafo)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers', integral_value_trafo)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers scaled', ratio_trafo)
         disparity_values.append(ratio_trafo)
 
     if selected_indicators["Disparity Lines"]:
@@ -543,13 +554,14 @@ def run_analysis_for_single_grid(grid_name):
         integral_value_line = disparity_df_lines.values.sum()
         ratio_line = integral_value_line / max_int_disp_lines
         ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines, ratio_line)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Lines', ratio_line)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Lines', integral_value_line)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Lines scaled', ratio_line)
         disparity_values.append(ratio_line)
 
     # Calculate overall disparity average
     if disparity_values:
         avg_disparity = sum(disparity_values) / len(disparity_values)
-        dfinalresults = add_indicator(dfinalresults, 'Disparity Average', avg_disparity)
+        dfinalresults = add_indicator(dfinalresults, 'Disparity Average scaled', avg_disparity)
 
     if selected_indicators["N-3 Redundancy"]:
         if not basic["Overview_Grid"]:
@@ -581,12 +593,14 @@ def run_analysis_for_single_grid(grid_name):
 
         # Ergebnis in DataFrame speichern
         dfinalresults = add_indicator(dfinalresults, 'Redundancy N-3', rate)
+        # Prozentzahl, keine Normierung notwendig
 
     if selected_indicators["Redundancy"]:
         Lastfluss, n2_Redundanz, kombi, component_indicators, red_results = Redundancy(net, 300)
         dfinalresults = add_indicator(dfinalresults, "Redundancy Loadflow", Lastfluss)
         dfinalresults = add_indicator(dfinalresults, "Redundancy N-2", n2_Redundanz)
         dfinalresults = add_indicator(dfinalresults, "Redundancy Average", kombi)
+        # Prozentzahl, keine Normierung notwendig
 
         # dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
         # Ausgabe der Indikatoren pro Komponente:
@@ -611,17 +625,22 @@ def run_analysis_for_single_grid(grid_name):
         dflexiresults = calculate_flexibility(net)
         dfinalresults = add_indicator(dfinalresults, 'Flexibility Grid Reserves', dflexiresults.loc[
             dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
+        # Prozentzahl, keine Normierung notwendig
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Critical Lines scaled', dflexiresults.loc[
+            dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen scaled', 'Value'].values[0])
         dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Critical Lines', dflexiresults.loc[
             dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen', 'Value'].values[0])
         dfinalresults = add_indicator(dfinalresults, 'Flexibility Average', dflexiresults.loc[
             dflexiresults['Indicator'] == 'Flexibilität Gesamt', 'Value'].values[0])
 
     if selected_indicators["Buffer"]:
-        Speicher = calculate_buffer(net)
-        dfinalresults = add_indicator(dfinalresults, 'Buffer Capacity', Speicher)
+        speicher_scaled, speicher = calculate_buffer(net)
+        dfinalresults = add_indicator(dfinalresults, 'Buffer Capacity scaled', speicher_scaled)
+        dfinalresults = add_indicator(dfinalresults, 'Buffer Capacity', speicher)
 
     if selected_indicators["Flexibility_fxor"]:
-        Flex_fxor = flexibility_fxor(net, False)
+        Flex_fxor_scaled, Flex_fxor = flexibility_fxor(net, False)
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Feasible Operating Region scaled', Flex_fxor_scaled)
         dfinalresults = add_indicator(dfinalresults, 'Flexibility Feasible Operating Region', Flex_fxor)
 
     if selected_indicators["n_3_redundancy_print"]:
@@ -632,6 +651,9 @@ def run_analysis_for_single_grid(grid_name):
         plot_spider_chart(dfinalresults)
 
     if not dfinalresults.empty:
+        timeras1 = time.time() - timeras
+        dfinalresults = add_indicator(dfinalresults, "Time required", timeras1)
+
         # Separate the first and last row
         first_row = dfinalresults.iloc[[0]]
 
@@ -645,6 +667,8 @@ def run_analysis_for_single_grid(grid_name):
         print("Results for Indicators:")
         print(dfinalresults)
 
+
+    
     if selected_scenario["stress_scenario"]:
 
         if selected_scenario["all"]:
@@ -714,6 +738,7 @@ def run_analysis_for_single_grid(grid_name):
                 dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
 
 
+
 def run_all_grids(start_time):
     """
     Loops over the grids dictionary and runs the above 'run_analysis_for_single_grid' on each.
@@ -722,7 +747,7 @@ def run_all_grids(start_time):
         timer =  time.time() - start_time
         print(f"\n--- Running analysis for grid: {grid_name} at {timer}---")
 
-        run_analysis_for_single_grid(grid_name)
+        run_analysis_for_single_grid(grid_name, timer)
 
 
 def main():
