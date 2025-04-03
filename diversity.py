@@ -19,7 +19,10 @@ def calculate_shannon_evenness_and_variety(data, max_known_types):
     # Calculate the proportion of each type
 
     total_components = len(data)
-    proportions = component_types / total_components if total_components > 0 else 0
+    if total_components > 0:
+        proportions = np.minimum(1, component_types / total_components)
+    else:
+        proportions = pd.Series(0, index=component_types.index)  # or just proportions = 0
 
     # Calculate the Shannon entropy
     shannon_entropy = -np.sum(proportions * np.log(proportions))

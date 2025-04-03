@@ -41,7 +41,7 @@ grids = {
     # "case6ww": pn.case6ww,
     # "case9": pn.case9,
     # "create_cigre_network_lv": pn.create_cigre_network_lv,
-    # # #"create_cigre_network_mv": pn.create_cigre_network_mv,
+    # #"create_cigre_network_mv": pn.create_cigre_network_mv,
      "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
     # # #"create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
@@ -79,7 +79,7 @@ grids = {
     # # "1-LV-urban6--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--2-sw"), 1.5),
     # #
     # # # Medium-voltage grids (not already added)
-    "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
+    # "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
     # # "1-MV-comm--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--1-sw"), 1.5),
     # # "1-MV-comm--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--2-sw"), 1.5),
     # # "1-MV-rural--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--0-sw"), 1.5),
@@ -311,7 +311,7 @@ selected_scenario = {
     "IT-Attack": {"active": False, "runs": 20},
     "Geopolitical_gas": {"active": True, "runs": 10},
     "Geopolitical_h2": {"active": True, "runs": 10},
-    "high_EE_generation": {"active": False, "runs": 25},
+    "high_EE_generation": {"active": True, "runs": 25},
     "high_load": {"active": True, "runs": 25},
     "sabotage_trafo": {"active": True, "runs": 20},
     "print_results": True,
@@ -320,7 +320,8 @@ selected_scenario = {
 
 
 # Main Function
-def run_analysis_for_single_grid(grid_name, timeras):
+def run_analysis_for_single_grid(grid_name):
+    start_timer = time.time()
     dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
 
@@ -354,18 +355,29 @@ def run_analysis_for_single_grid(grid_name, timeras):
     if basic["Adjustments"]:
         net = set_missing_limits(net)
 
+    if selected_scenario["all"]:
+        # Setze alle anderen Indikatoren auf True
+        for key, value in selected_scenario.items():
+            if isinstance(value, dict):
+                value["active"] = True
 
     if net.bus_geodata.empty:
         selected_scenario["Flood"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 0)
+        dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 2)
 
     if net.trafo.empty:
         selected_scenario["sabotage_trafo"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 0)
+        dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 2)
 
-    if net.sgen[net.sgen["type"].str.contains("fuel cell", case=False, na=False)].empty:
+    if net.sgen.empty or not net.sgen["type"].str.contains("fuel cell", case=False, na=False).any():
         selected_scenario["Geopolitical_h2"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 0)
+        dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 2)
+
+    if net.sgen.empty or not net.sgen["type"].str.contains("CHP|Gasturbine", case=False, na=False).any():
+        selected_scenario["Geopolitical_gas"]["active"] = False
+        dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_gas", 2)
+
+    print(f"{selected_indicators}")
 
     if selected_indicators["all"]:
         # Setze alle anderen Indikatoren auf True
@@ -390,8 +402,8 @@ def run_analysis_for_single_grid(grid_name, timeras):
             selected_indicators["Load Shannon Evenness"]:
         # Define the maximum known types for each component
         max_known_types = {
-            'generation': 8,
-            # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, storage: battery, hydro
+            'generation': 10,
+            # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, generator, static generator; storage: battery, hydro,
             'line': 2,  # "ol" (overhead line) and "cs" (cable system)
             'load': 10
             # Example: 10 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
@@ -519,7 +531,7 @@ def run_analysis_for_single_grid(grid_name, timeras):
 
         disparity_df_gen, max_integral_gen = calculate_disparity_space(net, generation_factors)
         integral_value_gen = disparity_df_gen.values.sum()
-        ratio_gen = integral_value_gen / max_integral_gen
+        ratio_gen = min(1,integral_value_gen / max_integral_gen)
         ddisparity = add_disparity(ddisparity, 'Generators', integral_value_gen, max_integral_gen, ratio_gen)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Generators', integral_value_gen)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Generators scaled', ratio_gen)
@@ -528,7 +540,7 @@ def run_analysis_for_single_grid(grid_name, timeras):
     if selected_indicators["Disparity Loads"]:
         disparity_df_load, max_integral_load = calculate_load_disparity(net)
         integral_value_load = disparity_df_load.values.sum()
-        ratio_load = integral_value_load / max_integral_load
+        ratio_load = min(1,integral_value_load / max_integral_load)
         ddisparity = add_disparity(ddisparity, 'Load', integral_value_load, max_integral_load, ratio_load)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Loads', integral_value_load)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Loads scaled', ratio_load)
@@ -537,12 +549,14 @@ def run_analysis_for_single_grid(grid_name, timeras):
     if selected_indicators["Disparity Transformers"]:
         disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
         integral_value_trafo = disparity_df_trafo.values.sum()
-        if integral_value_trafo == 0 or ddisparity[ddisparity['Name'] == 'Trafo'].empty:
+        print(disparity_df_trafo)
+        print(ddisparity)
+        if integral_value_trafo == 0 or disparity_df_trafo.empty:
             print("Disparity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
             ratio_trafo = 0
             ddisparity = add_disparity(ddisparity, 'Trafo', 0, max_int_trafo, 0)
         else:
-            ratio_trafo = integral_value_trafo / max_int_trafo
+            ratio_trafo = min(1,integral_value_trafo / max_int_trafo)
             ddisparity = add_disparity(ddisparity, 'Trafo', integral_value_trafo, max_int_trafo, ratio_trafo)
 
         dfinalresults = add_indicator(dfinalresults, 'Disparity Transformers', integral_value_trafo)
@@ -552,7 +566,7 @@ def run_analysis_for_single_grid(grid_name, timeras):
     if selected_indicators["Disparity Lines"]:
         disparity_df_lines, max_int_disp_lines = calculate_line_disparity(net)
         integral_value_line = disparity_df_lines.values.sum()
-        ratio_line = integral_value_line / max_int_disp_lines
+        ratio_line = min(1,integral_value_line / max_int_disp_lines)
         ddisparity = add_disparity(ddisparity, 'Lines', integral_value_line, max_int_disp_lines, ratio_line)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Lines', integral_value_line)
         dfinalresults = add_indicator(dfinalresults, 'Disparity Lines scaled', ratio_line)
@@ -651,8 +665,8 @@ def run_analysis_for_single_grid(grid_name, timeras):
         plot_spider_chart(dfinalresults)
 
     if not dfinalresults.empty:
-        timeras1 = time.time() - timeras
-        dfinalresults = add_indicator(dfinalresults, "Time required", timeras1)
+        runtime_required = (time.time() - start_timer)
+        dfinalresults = add_indicator(dfinalresults, "Time required", runtime_required)
 
         # Separate the first and last row
         first_row = dfinalresults.iloc[[0]]
@@ -671,16 +685,11 @@ def run_analysis_for_single_grid(grid_name, timeras):
     
     if selected_scenario["stress_scenario"]:
 
-        if selected_scenario["all"]:
-            # Setze alle anderen Indikatoren auf True
-            for key, value in selected_scenario.items():
-                if isinstance(value, dict):
-                    value["active"] = True
-
         for scenario, params in selected_scenario.items():
             if isinstance(params, dict) and params.get("active", False):
                 stressor = scenario.lower()
                 scenario_values = []
+                print(f"{stressor}")
 
                 for n in range(params.get("runs", 10)):  # fallback to 10 runs if "runs" not defined
                     modified_nets = stress_scenarios(net, [stressor])
@@ -705,6 +714,7 @@ def run_analysis_for_single_grid(grid_name, timeras):
 
         if not dfresultsscenario.empty:
             # Separate the first and last row
+            print(dfresultsscenario)
             first_row = dfresultsscenario.iloc[[0]]
 
             # Sort everything in between
@@ -715,11 +725,16 @@ def run_analysis_for_single_grid(grid_name, timeras):
 
             # Compute the average of all values excluding the first row
             if len(dfresultsscenario) > 1:  # Ensure there are enough rows to calculate an average
-                scenario_average_value = dfresultsscenario["Value"].iloc[1:].mean()  # Exclude the first row
+                valid_values = dfresultsscenario["Value"].iloc[1:] # Exclude the first row
+                filtered_values = valid_values[(valid_values >= 0) & (valid_values <= 1)] # Exclude values above 1 = not calculated scenarios
+                scenario_average_value = filtered_values.mean()
 
             # Add the average as a new row
             dfresultsscenario = add_indicator(dfresultsscenario, "Overall Scenario Resilience Score",
                                               scenario_average_value)
+
+            dfresultsscenario["Value"] = dfresultsscenario["Value"].replace(2, np.nan)
+
             if selected_scenario["print_results"]:
                 print(dfresultsscenario)
 
@@ -747,7 +762,7 @@ def run_all_grids(start_time):
         timer =  time.time() - start_time
         print(f"\n--- Running analysis for grid: {grid_name} at {timer}---")
 
-        run_analysis_for_single_grid(grid_name, timer)
+        run_analysis_for_single_grid(grid_name)
 
 
 def main():

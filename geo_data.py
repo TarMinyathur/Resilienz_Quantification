@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def get_geodata_coordinates(net_temp_geo):
+def get_geodata_coordinates(net_temp_geo, debug=False):
     # Lists to store all x and y coordinates
     x_coords, y_coords = [], []
 
@@ -13,7 +13,8 @@ def get_geodata_coordinates(net_temp_geo):
 
     # Check if bus geodata is available
     if not net_temp_geo.bus_geodata.empty:
-        print("bus geo_data available")
+        if debug:
+            print("bus geo_data available")
         x_coords.extend(net_temp_geo.bus_geodata["x"])
         y_coords.extend(net_temp_geo.bus_geodata["y"])
 
@@ -24,7 +25,7 @@ def get_geodata_coordinates(net_temp_geo):
     return x_coords, y_coords
 
 
-def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduction_rate):
+def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduction_rate, debug= False):
     # Compute area if we have any geodata
     if x_coords and y_coords:
         x_min, x_max = min(x_coords), max(x_coords)
@@ -37,8 +38,9 @@ def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduct
         area_destroyed = area * reduction_rate
         side_length = np.sqrt(area_destroyed)  # Square root to get a square-like area
 
-        print(f"Total net area: {area:.2f}")
-        print(f"Area to be destroyed: {area_destroyed:.2f}")
+        if debug:
+            print(f"Total net area: {area:.2f}")
+            print(f"Area to be destroyed: {area_destroyed:.2f}")
 
     if random_select:
         # Select a random x and y range
@@ -60,12 +62,13 @@ def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduct
         (net_temp_geo.bus_geodata["y"] >= y_start) & (net_temp_geo.bus_geodata["y"] <= y_end)
         ].index
 
-    print(f"Buses to be disabled: {list(buses_to_disable)}")
+    if debug:
+        print(f"Buses to be disabled: {list(buses_to_disable)}")
 
     return buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length
 
 
-def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select, reduction_rate):
+def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select, reduction_rate, debug = False):
     if not x_coords or not y_coords:
         # No data, bail out
         return [], 0, 0, 0
@@ -91,9 +94,10 @@ def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select,
     # Convert to flood circle radius
     flood_radius = np.sqrt(area_destroyed / np.pi)
 
-    print(f"Total bounding circle area: {bounding_area:.2f}")
-    print(f"Area to be destroyed: {area_destroyed:.2f}")
-    print(f"Flood circle radius: {flood_radius:.2f}")
+    if debug:
+        print(f"Total bounding circle area: {bounding_area:.2f}")
+        print(f"Area to be destroyed: {area_destroyed:.2f}")
+        print(f"Flood circle radius: {flood_radius:.2f}")
 
     # Pick random center for the flood circle
     if random_select:
@@ -119,7 +123,8 @@ def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select,
 
     buses_to_disable = net_temp_geo.bus_geodata[dist_sq <= flood_radius_sq].index
 
-    print(f"Buses to be disabled: {list(buses_to_disable)}")
+    if debug:
+        print(f"Buses to be disabled: {list(buses_to_disable)}")
 
     # Return the center coords and radius if you want to plot
     return buses_to_disable, flood_center_x, flood_center_y, flood_radius
@@ -210,7 +215,7 @@ def components_to_disable_static(net_temp_geo, buses_to_disable):
     return net_temp_geo
 
 
-def components_to_disable_dynamic(net_temp_geo, buses_to_disable):
+def components_to_disable_dynamic(net_temp_geo, buses_to_disable, debug = False):
     # Liste der Komponenten mit den zu überprüfenden Bus-Spalten
     bus_columns = {
         'load': ['bus'],
@@ -240,12 +245,13 @@ def components_to_disable_dynamic(net_temp_geo, buses_to_disable):
                 net_temp_geo[comp].loc[mask, "in_service"] = False
                 deactivated_components[comp] = mask.sum()  # Speichert Anzahl der deaktivierten Elemente
 
-    for comp, count in deactivated_components.items():
-        print(f"{comp}: {count} deactivated")
+    if debug:
+        for comp, count in deactivated_components.items():
+            print(f"{comp}: {count} deactivated")
 
-    # Falls keine Komponenten deaktiviert wurden
-    if not deactivated_components:
-        print("no components deactivated")
+        # Falls keine Komponenten deaktiviert wurden
+        if not deactivated_components:
+            print("no components deactivated")
 
     return net_temp_geo
 

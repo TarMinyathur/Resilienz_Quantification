@@ -17,22 +17,18 @@ class Scenario:
 
         # dictionary for accessing and "damaging" components correctly
         self.component_data = {
-            "PV": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)pv(?:_.*)?$')],
+            "PV": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)pv(?:_.*)?$', na=False)],
                    "element": "sgen", "column": "p_mw"},
-            "WP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:wind(?:_.*)?|wp(?:_.*)?)$')],
+            "WP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:wind(?:_.*)?|wp(?:_.*)?)$', na=False)],
                    "element": "sgen", "column": "p_mw"},
-            "Biomass": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:biomass(?:_.*)?')],
+            "Biomass": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:biomass(?:_.*)?)', na=False)],
                    "element": "sgen", "column": "p_mw"},
-            "Hydro": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:hydro(?:_.*)?')],
+            "Hydro": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)^(?:hydro(?:_.*)?)', na=False)],
                    "element": "sgen", "column": "p_mw"},
-            "CHP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[
-                net_temp_stress.sgen["type"].str.contains("CHP", case=False, na=False)], "element": "sgen",
-                    "column": "p_mw"},
-            "Gasturbine": {"filter": lambda net_temp_stress: net_temp_stress.gen[(net_temp_stress.gen["type"].str.contains("", case=False, na=False)) &
-        (net_temp_stress.gen["name"].str.contains(r'(?i)gas(?:_.*)?$'))],"element": "gen","column": "p_mw"},
-            "fuel_cell": {"filter": lambda net_temp_stress: net_temp_stress.sgen[
-                net_temp_stress.sgen["type"].str.contains("fuel cell", case=False, na=False)], "element": "sgen",
-                          "column": "p_mw"},
+            "CHP": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)chp', na=False)], "element": "sgen", "column": "p_mw"},
+            "Gasturbine": {"filter": lambda net_temp_stress: net_temp_stress.gen[(net_temp_stress.gen["type"].str.contains(r"", case=False, na=False)) & (net_temp_stress.gen["name"].str.contains(r'(?i)gas'))],"element": "gen","column": "p_mw"},
+            "gas_sgen": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r'(?i)gas')], "element": "sgen", "column": "p_mw"},
+            "fuel_cell": {"filter": lambda net_temp_stress: net_temp_stress.sgen[net_temp_stress.sgen["type"].str.contains(r"(?i)fuel\s*cell", na=False)], "element": "sgen", "column": "p_mw"},
             "sgen": {"filter": lambda net_temp_stress: net_temp_stress.sgen, "element": "sgen", "column": "p_mw"},
             "gen": {"filter": lambda net_temp_stress: net_temp_stress.gen, "element": "gen", "column": "p_mw"},
             "load": {"filter": lambda net_temp_stress: net_temp_stress.load, "element": "load", "column": "p_mw"},
@@ -138,11 +134,11 @@ def get_scenarios():
                  targets=random.sample(["overhead_lines", "underground_lines", "trafo"], k=random.randint(1,3)),
                  reduction_rate=random.uniform(0.1, 1),
                  random_select=True),
-        Scenario("geopolitical_gas", mode="component", targets=["CHP", "Gasturbine"], reduction_rate=random.uniform(0.7, 1), random_select=True),
+        Scenario("geopolitical_gas", mode="component", targets=["CHP", "Gasturbine", "gas_sgen"], reduction_rate=random.uniform(0.7, 1), random_select=True),
         Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=random.uniform(0.7, 1), random_select=True),
         Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1.5, 5)),
-        Scenario("sabotage_trafo", mode="component", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
-        Scenario("high_EE_generation", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1.5, 5)),
+        Scenario("sabotage_trafo", mode="types", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
+        Scenario("high_ee_generation", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1.5, 5)),
     ]
 
 
@@ -154,7 +150,7 @@ def stress_scenarios(net_temp_stress, selected_scenarios):
     valid_scenario_names = [scenario.name for scenario in scenarios_list]
 
     if not all(s in valid_scenario_names for s in selected_scenarios):  # Validate scenarios
-        print(f"selected_scenarios")
+        print(f"{selected_scenarios}")
         print("Invalid or no scenario selected. Please check selected scenario(s)!")
     else:
         modified_net_temp_stresss = scenarios(net_temp_stress, selected_scenarios)
