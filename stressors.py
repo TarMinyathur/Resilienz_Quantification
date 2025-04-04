@@ -47,13 +47,14 @@ class Scenario:
         }
 
     # adapt net_temp_stress to scenario
-    def apply_modifications(self, net_temp_stress):
+    def apply_modifications(self, net_temp_stress, debug=False):
         for target in self.targets:
-            if target == "n.a.":  # for mode = "geo"
-                print("target n.a.")
-            elif target not in self.component_data:
-                print(f"Add target {target} to target list or select different target.")
-                continue  # unknown target, continue to next iteration
+            if debug:
+                if target == "n.a.":  # for mode = "geo"
+                    print("target n.a.")
+                elif target not in self.component_data:
+                    print(f"Add target {target} to target list or select different target.")
+                    continue  # unknown target, continue to next iteration
 
             if target in self.component_data:
                 df = self.component_data[target]["filter"](net_temp_stress)  # call component filters and get df

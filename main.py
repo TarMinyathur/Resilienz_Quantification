@@ -42,7 +42,7 @@ grids = {
     # "case9": pn.case9,
     # "create_cigre_network_lv": pn.create_cigre_network_lv,
     # #"create_cigre_network_mv": pn.create_cigre_network_mv,
-     "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
     # # #"create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
     # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
     # #
@@ -55,7 +55,7 @@ grids = {
     # # "mv_oberrhein": lambda: increase_line_limits(pn.mv_oberrhein(), 1.5),
     # #
     # # # # High-voltage grids
-    #"1-HV-mixed--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--0-sw"), 1.5),
+    "1-HV-mixed--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--0-sw"), 1.5),
     # # "1-HV-mixed--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--1-sw"), 1.5),
     # # "1-HV-urban--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--0-sw"), 1.5),
     # # "1-HV-urban--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--1-sw"), 1.5),
@@ -79,7 +79,7 @@ grids = {
     # # "1-LV-urban6--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--2-sw"), 1.5),
     # #
     # # # Medium-voltage grids (not already added)
-    # "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
+     "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
     # # "1-MV-comm--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--1-sw"), 1.5),
     # # "1-MV-comm--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--2-sw"), 1.5),
     # # "1-MV-rural--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--0-sw"), 1.5),
@@ -93,7 +93,7 @@ grids = {
     # # "1-MV-urban--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--2-sw"), 1.5),
     # #
     # # # -- HVMV-mixed grids --
-    # # "1-HVMV-mixed-1.105-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-0-no_sw"), 1.5),
+    "1-HVMV-mixed-1.105-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-0-no_sw"), 1.5),
     # # "1-HVMV-mixed-1.105-0-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-0-sw"), 1.5),
     # # "1-HVMV-mixed-1.105-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-1-no_sw"), 1.5),
     # # "1-HVMV-mixed-1.105-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-1-sw"), 1.5),
@@ -147,7 +147,7 @@ grids = {
     # # "1-MVLV-rural-1.108-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-1.108-0-no_sw"), 1.5),
     # # "1-MVLV-rural-1.108-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-1.108-0-sw"), 1.5),
     # #
-    # "1-MVLV-rural-2.107-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"), 1.5),
+     "1-MVLV-rural-2.107-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"), 1.5),
     # # #"1-MVLV-rural-2.107-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-sw"), 1.5),
     # "1-MVLV-rural-2.107-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-1-no_sw"), 1.5),
     # # #"1-MVLV-rural-2.107-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-1-sw"), 1.5),
@@ -162,7 +162,7 @@ grids = {
     # "1-MVLV-rural-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-all-0-no_sw"), 1.5),
     # #"1-MVLV-rural-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-all-0-sw"), 1.5),
     #
-    # "1-MVLV-semiurb-3.202-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),1.5),
+     "1-MVLV-semiurb-3.202-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),1.5),
     # # #"1-MVLV-semiurb-3.202-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-sw"), 1.5),
     # "1-MVLV-semiurb-3.202-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-1-no_sw"), 1.5),
     # #"1-MVLV-semiurb-3.202-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-1-sw"), 1.5),
@@ -191,7 +191,7 @@ grids = {
     # #"1-MVLV-semiurb-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-all-0-sw"), 1.5),
     # #
     # # # Urban MVLV grids
-    #  "1-MVLV-urban-5.303-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"), 1.5),
+      "1-MVLV-urban-5.303-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"), 1.5),
     # #"1-MVLV-urban-5.303-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-sw"), 1.5),
     # "1-MVLV-urban-5.303-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-1-no_sw"), 1.5),
     # #"1-MVLV-urban-5.303-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-1-sw"), 1.5),
@@ -376,8 +376,6 @@ def run_analysis_for_single_grid(grid_name):
     if net.sgen.empty or not net.sgen["type"].str.contains("CHP|Gasturbine", case=False, na=False).any():
         selected_scenario["Geopolitical_gas"]["active"] = False
         dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_gas", 2)
-
-    print(f"{selected_indicators}")
 
     if selected_indicators["all"]:
         # Setze alle anderen Indikatoren auf True
@@ -637,8 +635,8 @@ def run_analysis_for_single_grid(grid_name):
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)
-        dfinalresults = add_indicator(dfinalresults, 'Flexibility Grid Reserves', dflexiresults.loc[
-            dflexiresults['Indicator'] == 'Flex Netzreserve', 'Value'].values[0])
+        dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Lines', dflexiresults.loc[
+            dflexiresults['Indicator'] == 'Flex Reserve Leitungen', 'Value'].values[0])
         # Prozentzahl, keine Normierung notwendig
         dfinalresults = add_indicator(dfinalresults, 'Flexibility Reserve Critical Lines scaled', dflexiresults.loc[
             dflexiresults['Indicator'] == 'Flex Reserve krit Leitungen scaled', 'Value'].values[0])

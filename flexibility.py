@@ -8,8 +8,9 @@ from initialize import add_indicator
 def calculate_flexibility(net_flex):
 
     dflexresults = pd.DataFrame(columns=['Indicator', 'Value'])
+    pp.runpp(net_flex)
     flex2 = calculate_net_flexwork_reserve(net_flex)
-    dflexresults = add_indicator(dflexresults, 'Flex Netzreserve', flex2)
+    dflexresults = add_indicator(dflexresults, 'Flex Reserve Leitungen', flex2)
     flex4_normed, flex4 = calculate_loadflow_reserve(net_flex)
     dflexresults = add_indicator(dflexresults, 'Flex Reserve krit Leitungen scaled', flex4_normed)
     dflexresults = add_indicator(dflexresults, 'Flex Reserve krit Leitungen', flex4)
@@ -28,9 +29,9 @@ def calculate_net_flexwork_reserve(net_flexb):
     S_current = np.sqrt(net_flexb.res_line.p_from_mw ** 2 + net_flexb.res_line.q_from_mvar ** 2)
     S_current_total = np.sum(S_current)
 
-    # Flexibilität = Verhältnis ungenutzter Kapazität zu Gesamt-Kapazität
+    # Flexibilität = Verhältnis ungenutzter Kapazität der Leitungen zu Gesamt-Kapazität
     if S_max_total > 0:
-        flexibility_index = (S_max_total - S_current_total) / S_max_total
+        flexibility_index = max(0, (S_max_total - S_current_total) / S_max_total)
     else:
         flexibility_index = 0  # Falls keine Kapazitätswerte vorhanden sind
 
