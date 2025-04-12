@@ -3,15 +3,15 @@
 
 import pandapower as pp
 import pandas as pd
-def set_power_limits(df):
-    """
-    Vectorized function to set power limits for gen, sgen, and storage.
-    """
-
-    # Ensure required columns exist, initializing with NaN if missing
-    for col in ['max_p_mw', 'min_p_mw', 'max_q_mvar', 'min_q_mvar']:
-        if col not in df.columns:
-            df[col] = pd.NA  # Initialize with NaN
+# def set_power_limits(df):
+#     """
+#     Vectorized function to set power limits for gen, sgen, and storage.
+#     """
+#
+#     # Ensure required columns exist, initializing with NaN if missing
+#     for col in ['max_p_mw', 'min_p_mw', 'max_q_mvar', 'min_q_mvar']:
+#         if col not in df.columns:
+#             df[col] = pd.NA  # Initialize with NaN
 
 def set_missing_limits(net):
     # Process conventional generators (gen)

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def get_geodata_coordinates(net_temp_geo, debug=False):
+def get_geodata_coordinates(net_temp_geo, debug=True):
     # Lists to store all x and y coordinates
     x_coords, y_coords = [], []
 
@@ -25,7 +25,7 @@ def get_geodata_coordinates(net_temp_geo, debug=False):
     return x_coords, y_coords
 
 
-def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduction_rate, debug= False):
+def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduction_rate, debug= True):
     # Compute area if we have any geodata
     if x_coords and y_coords:
         x_min, x_max = min(x_coords), max(x_coords)
@@ -68,7 +68,7 @@ def get_buses_to_disable(net_temp_geo, x_coords, y_coords, random_select, reduct
     return buses_to_disable, x_min, x_start, x_max, y_min, y_start, y_max, side_length
 
 
-def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select, reduction_rate, debug = False):
+def get_buses_to_disable_circle(net_temp_geo, x_coords, y_coords, random_select, reduction_rate, debug = True):
     if not x_coords or not y_coords:
         # No data, bail out
         return [], 0, 0, 0

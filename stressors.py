@@ -50,6 +50,9 @@ class Scenario:
     def apply_modifications(self, net_temp_stress, debug=False):
         for target in self.targets:
             if debug:
+                print("load")
+                print(net_temp_stress.load)
+
                 if target == "n.a.":  # for mode = "geo"
                     print("target n.a.")
                 elif target not in self.component_data:
@@ -66,7 +69,20 @@ class Scenario:
                 element, column = self.component_data[target]["element"], self.component_data[target]["column"]
 
             if self.mode == "types":
-                if column == "p_mw":
+                if element == "load":
+                    # Reduziere p_mw und q_mvar Werte der Loads
+                    # Check that loads are not generators
+                    # Reduce only positive active power values
+                    positive_p = net_temp_stress[element].loc[df.index, "p_mw"] > 0
+                    net_temp_stress[element].loc[df.index[positive_p], "p_mw"] *= self.reduction_rate
+
+                    # Reduce only positive reactive power values (if present)
+                    if "q_mvar" in net_temp_stress[element].columns:
+                        positive_q = net_temp_stress[element].loc[df.index, "q_mvar"] > 0
+                        net_temp_stress[element].loc[df.index[positive_q], "q_mvar"] *= self.reduction_rate
+                        net_temp_stress[element].loc[df.index[positive_q], "sn_mva"] *= self.reduction_rate**2
+
+                elif column == "p_mw":
                     # Reduziere p_mw und q_mvar Werte
                     net_temp_stress[element].loc[df.index, "p_mw"] *= self.reduction_rate
                     if "q_mvar" in net_temp_stress[element].columns:
@@ -81,8 +97,7 @@ class Scenario:
                         net_temp_stress[element].loc[df.index, "q_mvar_max"] *= self.reduction_rate
                     if "q_mvar_min" in net_temp_stress[element].columns:
                         net_temp_stress[element].loc[df.index, "q_mvar_min"] *= self.reduction_rate
-                else:
-                    False
+
 
             # mode = component -> apply changes to specific components
             elif self.mode == "component":
@@ -102,10 +117,14 @@ class Scenario:
                 # net_temp_stress = components_to_disable_static(net_temp_stress, buses_to_disable)
                 net_temp_stress = components_to_disable_dynamic(net_temp_stress, buses_to_disable)
 
+        if debug:
+            print("load adjusted")
+            print(net_temp_stress.load)
+
         return net_temp_stress
 
 
-def scenarios(net_temp_stress, selected_scenarios):
+def scenarios(net_temp_stress, selected_scenarios, debug=False):
     scenarios_list = get_scenarios()
     modified_net_temp_stresss = []
 
@@ -114,6 +133,9 @@ def scenarios(net_temp_stress, selected_scenarios):
             net_temp_stress_copy = copy.deepcopy(net_temp_stress)  # blanko net_temp_stress for each scenario
             modified_net_temp_stress = scenario.apply_modifications(
                 net_temp_stress_copy)  # Apply scenario modifications
+            if debug:
+                print("load adjusted")
+                print(modified_net_temp_stress.load)
             modified_net_temp_stresss.append((scenario.name,
                                               modified_net_temp_stress))  # Store scenario name and modified net_temp_stress as tulple for mapping/ association
 
@@ -128,18 +150,18 @@ def get_scenarios():
         Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.5), random_select=True),
         Scenario("earthquake", mode="component",
                  targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(1,6)),
-                 reduction_rate=random.uniform(0.3, 0.7),
+                 reduction_rate=random.uniform(0, 1),
                  random_select=True),
         Scenario("dunkelflaute", mode="types", targets=["PV", "WP"], reduction_rate=random.uniform(0, 0.15)),
         Scenario("storm", mode="component",
                  targets=random.sample(["overhead_lines", "underground_lines", "trafo"], k=random.randint(1,3)),
                  reduction_rate=random.uniform(0.1, 1),
                  random_select=True),
-        Scenario("geopolitical_gas", mode="component", targets=["CHP", "Gasturbine", "gas_sgen"], reduction_rate=random.uniform(0.7, 1), random_select=True),
-        Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=random.uniform(0.7, 1), random_select=True),
-        Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1.5, 5)),
+        Scenario("geopolitical_gas", mode="component", targets=["CHP", "Gasturbine", "gas_sgen"], reduction_rate=random.uniform(0, 1), random_select=True),
+        Scenario("geopolitical_h2", mode="component", targets=["fuel_cell"], reduction_rate=random.uniform(0, 1), random_select=True),
+        Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1, 5)),
         Scenario("sabotage_trafo", mode="types", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
-        Scenario("high_ee_generation", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1.5, 5)),
+        Scenario("high_ee_generation", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1, 5)),
     ]
 
 
@@ -169,6 +191,7 @@ if __name__ == "__main__":
     selected_scenarios = ["flood", "earthquake", "storm", "sabotage_trafo", "dunkelflaute"]
 
     net_temp_stress_stress = stress_scenarios(net_temp_stress, selected_scenarios)
+
     # for scenario_name, stressed_net in net_temp_stress_stress:
     #     print("=" * 60)
     #     print(f"Scenario: {scenario_name}")

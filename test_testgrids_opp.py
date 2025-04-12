@@ -50,6 +50,9 @@ def load_cigre_mv_network_onefeeder_der():
 # ----------------------------
 scenarios = ["0", "1", "2"]
 
+# Dictionary to store results
+negative_loads_result = {}
+
 # Basic single-voltage grid codes:
 basic_codes = []
 # EHV
@@ -69,8 +72,6 @@ basic_codes.extend([f"1-MV-comm--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-LV-semiurb4--{sc}-sw" for sc in scenarios])
 # basic_codes.extend([f"1-LV-semiurb5--{sc}-sw" for sc in scenarios])
 #basic_codes.extend([f"1-LV-urban6--{sc}-sw" for sc in scenarios])
-
-
 
 def load_example_power_flow():
     """Prüfen, ob ExamplePowerFlow.m MATPOWER-Struktur hat.
@@ -126,104 +127,104 @@ test_grids = [
     # ----------------------------------------------------------------------------
     # Example pandapower Networks (shipped with pandapower)
     # ----------------------------------------------------------------------------
-    #("example_simple", pn.example_simple),
-    #("example_multivoltage", pn.example_multivoltage),
+    ("example_simple", pn.example_simple),
+    ("example_multivoltage", pn.example_multivoltage),
 
-    # Neue Einträge für gefundene *.m Dateien (nur falls MATPOWER-kompatibel):
-    #("casePGE69BUS", load_case_pge69bus),
-    #("casePGE69BUS_DG", load_case_pge69bus_dg),
-    #("casePGE69BUS_DG_topo", load_case_pge69bus_dg_topo),
-    #("caseIEEE37_DG", load_case_ieee37_dg),
-    #("CigreMvNetwork", load_cigre_mv_network),
-    #("CigreMvNetwork_onefeeder", load_cigre_mv_network_onefeeder),
-    #("CigreMvNetwork_onefeeder_DER", load_cigre_mv_network_onefeeder_der),
-    #("ExamplePowerFlow", load_example_power_flow),
+    # # Neue Einträge für gefundene *.m Dateien (nur falls MATPOWER-kompatibel):
+    # ("casePGE69BUS", load_case_pge69bus),
+    # ("casePGE69BUS_DG", load_case_pge69bus_dg),
+    # ("casePGE69BUS_DG_topo", load_case_pge69bus_dg_topo),
+    # ("caseIEEE37_DG", load_case_ieee37_dg),
+    # ("CigreMvNetwork", load_cigre_mv_network),
+    # ("CigreMvNetwork_onefeeder", load_cigre_mv_network_onefeeder),
+    # ("CigreMvNetwork_onefeeder_DER", load_cigre_mv_network_onefeeder_der),
+    # ("ExamplePowerFlow", load_example_power_flow),
 
     # ----------------------------------------------------------------------------
     # Simple pandapower Test Networks
     # (uncomment if you want them)
-    # ("panda_four_load_branch", pn.panda_four_load_branch),
-    # ("four_loads_with_branches_out", pn.four_loads_with_branches_out),
-    # ("simple_four_bus_system", pn.simple_four_bus_system),
-    # ("simple_mv_open_ring_net", pn.simple_mv_open_ring_net),
+    ("panda_four_load_branch", pn.panda_four_load_branch),
+    ("four_loads_with_branches_out", pn.four_loads_with_branches_out),
+    ("simple_four_bus_system", pn.simple_four_bus_system),
+    ("simple_mv_open_ring_net", pn.simple_mv_open_ring_net),
 
     # ----------------------------------------------------------------------------
     # CIGRE Networks (built into pandapower)
     # ----------------------------------------------------------------------------
-    #("create_cigre_network_hv", pn.create_cigre_network_hv),
-    # ("create_cigre_network_mv", pn.create_cigre_network_mv),
-    # ("create_cigre_network_mv_pv_wind", lambda: pn.create_cigre_network_mv(with_der="pv_wind")),
-    # ("create_cigre_network_mv_all", lambda: pn.create_cigre_network_mv(with_der="all")),
-    # ("create_cigre_network_lv", pn.create_cigre_network_lv),
+    ("create_cigre_network_hv", pn.create_cigre_network_hv),
+    ("create_cigre_network_mv", pn.create_cigre_network_mv),
+    ("create_cigre_network_mv_pv_wind", lambda: pn.create_cigre_network_mv(with_der="pv_wind")),
+    ("create_cigre_network_mv_all", lambda: pn.create_cigre_network_mv(with_der="all")),
+    ("create_cigre_network_lv", pn.create_cigre_network_lv),
 
     # ----------------------------------------------------------------------------
     # MV Oberrhein (built into pandapower)
     # ----------------------------------------------------------------------------
-    #("mv_oberrhein", pn.mv_oberrhein),
+    ("mv_oberrhein", pn.mv_oberrhein),
 
     # ----------------------------------------------------------------------------
     # Built-in MATPOWER Cases (transmission & a few radial distribution)
     # ----------------------------------------------------------------------------
-    # ("case4gs", pn.case4gs),
-    # ("case5", pn.case5),
-    # ("case6ww", pn.case6ww),
-    # ("case9", pn.case9),
-    # ("case14", pn.case14),
-    # ("case24_ieee_rts", pn.case24_ieee_rts),
-    # ("case30", pn.case30),
-    # ("case33bw", pn.case33bw),  # 33-bus radial distribution feeder
-    # ("case39", pn.case39),
-    # ("case57", pn.case57),
-    # ("case89pegase", pn.case89pegase),
-    # ("case118", pn.case118),
-    # ("case145", pn.case145),
-    # ("case300", pn.case300),
-    # ("case1354pegase", pn.case1354pegase),
-    # ("case2869pegase", pn.case2869pegase),
-    # ("case9241pegase", pn.case9241pegase),
-    # ("case_illinois200", pn.case_illinois200),
-    # ("case_1888rte", pn.case1888rte),
-    # ("case_2848rte", pn.case2848rte),
-    # ("case_3120sp", pn.case3120sp),
-    # ("case_6470rte", pn.case6470rte),
-    # ("case_6495rte", pn.case6495rte),
-    # ("case_6515rte", pn.case6515rte),
-    # ("GBnetwork", pn.GBnetwork),
-    # ("GBreducednetwork", pn.GBreducednetwork),
-    #("iceland", pn.iceland),
+    ("case4gs", pn.case4gs),
+    ("case5", pn.case5),
+    ("case6ww", pn.case6ww),
+    ("case9", pn.case9),
+    ("case14", pn.case14),
+    ("case24_ieee_rts", pn.case24_ieee_rts),
+    ("case30", pn.case30),
+    ("case33bw", pn.case33bw),  # 33-bus radial distribution feeder
+    ("case39", pn.case39),
+    ("case57", pn.case57),
+    ("case89pegase", pn.case89pegase),
+    ("case118", pn.case118),
+    ("case145", pn.case145),
+    ("case300", pn.case300),
+    ("case1354pegase", pn.case1354pegase),
+    ("case2869pegase", pn.case2869pegase),
+    ("case9241pegase", pn.case9241pegase),
+    ("case_illinois200", pn.case_illinois200),
+    ("case_1888rte", pn.case1888rte),
+    ("case_2848rte", pn.case2848rte),
+    ("case_3120sp", pn.case3120sp),
+    ("case_6470rte", pn.case6470rte),
+    ("case_6495rte", pn.case6495rte),
+    ("case_6515rte", pn.case6515rte),
+    ("GBnetwork", pn.GBnetwork),
+    ("GBreducednetwork", pn.GBreducednetwork),
+    ("iceland", pn.iceland),
 
     # ----------------------------------------------------------------------------
     # Synthetic Distribution Network from pandapower
     # ----------------------------------------------------------------------------
-    #("create_synthetic_voltage_control_lv_network", pn.create_synthetic_voltage_control_lv_network),
+    ("create_synthetic_voltage_control_lv_network", pn.create_synthetic_voltage_control_lv_network),
 
     # ----------------------------------------------------------------------------
     # 3-Phase Grid Data
     # (uncomment if you need the asymmetric European LV feeder)
     # ----------------------------------------------------------------------------
-    # ("ieee_european_lv_asymmetric", pn.ieee_european_lv_asymmetric),
+     ("ieee_european_lv_asymmetric", pn.ieee_european_lv_asymmetric),
 
     # ----------------------------------------------------------------------------
     # Kerber Networks (Average & Extreme) – built into pandapower
     # ----------------------------------------------------------------------------
-    # ("create_kerber_landnetz_freileitung_1", pn.create_kerber_landnetz_freileitung_1),
-    # ("create_kerber_landnetz_freileitung_2", pn.create_kerber_landnetz_freileitung_2),
-    # ("create_kerber_landnetz_kabel_1", pn.create_kerber_landnetz_kabel_1),
-    # ("create_kerber_landnetz_kabel_2", pn.create_kerber_landnetz_kabel_2),
-    #("create_kerber_dorfnetz", pn.create_kerber_dorfnetz),
-    # ("create_kerber_vorstadtnetz_kabel_1", pn.create_kerber_vorstadtnetz_kabel_1),
-    # ("create_kerber_vorstadtnetz_kabel_2", pn.create_kerber_vorstadtnetz_kabel_2),
+    ("create_kerber_landnetz_freileitung_1", pn.create_kerber_landnetz_freileitung_1),
+    ("create_kerber_landnetz_freileitung_2", pn.create_kerber_landnetz_freileitung_2),
+    ("create_kerber_landnetz_kabel_1", pn.create_kerber_landnetz_kabel_1),
+    ("create_kerber_landnetz_kabel_2", pn.create_kerber_landnetz_kabel_2),
+    ("create_kerber_dorfnetz", pn.create_kerber_dorfnetz),
+    ("create_kerber_vorstadtnetz_kabel_1", pn.create_kerber_vorstadtnetz_kabel_1),
+    ("create_kerber_vorstadtnetz_kabel_2", pn.create_kerber_vorstadtnetz_kabel_2),
 
     # Extreme Kerber Networks
-    # ("kb_extrem_landnetz_freileitung", pn.kb_extrem_landnetz_freileitung),
-    # ("kb_extrem_landnetz_kabel", pn.kb_extrem_landnetz_kabel),
-    # ("kb_extrem_landnetz_freileitung_trafo", pn.kb_extrem_landnetz_freileitung_trafo),
-    # ("kb_extrem_landnetz_kabel_trafo", pn.kb_extrem_landnetz_kabel_trafo),
-    # ("kb_extrem_dorfnetz", pn.kb_extrem_dorfnetz),
-    # ("kb_extrem_dorfnetz_trafo", pn.kb_extrem_dorfnetz_trafo),
-    # ("kb_extrem_vorstadtnetz_1", pn.kb_extrem_vorstadtnetz_1),
-    # ("kb_extrem_vorstadtnetz_2", pn.kb_extrem_vorstadtnetz_2),
-    # ("kb_extrem_vorstadtnetz_trafo_1", pn.kb_extrem_vorstadtnetz_trafo_1),
+    ("kb_extrem_landnetz_freileitung", pn.kb_extrem_landnetz_freileitung),
+    ("kb_extrem_landnetz_kabel", pn.kb_extrem_landnetz_kabel),
+    ("kb_extrem_landnetz_freileitung_trafo", pn.kb_extrem_landnetz_freileitung_trafo),
+    ("kb_extrem_landnetz_kabel_trafo", pn.kb_extrem_landnetz_kabel_trafo),
+    ("kb_extrem_dorfnetz", pn.kb_extrem_dorfnetz),
+    ("kb_extrem_dorfnetz_trafo", pn.kb_extrem_dorfnetz_trafo),
+    ("kb_extrem_vorstadtnetz_1", pn.kb_extrem_vorstadtnetz_1),
+    ("kb_extrem_vorstadtnetz_2", pn.kb_extrem_vorstadtnetz_2),
+    ("kb_extrem_vorstadtnetz_trafo_1", pn.kb_extrem_vorstadtnetz_trafo_1),
 
     # ----------------------------------------------------------------------------
     # IEEE Distribution Feeders (placeholders - you must have the files locally)
@@ -248,13 +249,52 @@ test_grids = [
     # ("tamu_synthetic_mv", lambda: pc.from_mpc("tamu_synthetic_mv.m")),
     # ("nrel_feeder_x", lambda: pc.from_mpc("nrel_feeder_x.m")),
 
+    # # # # High-voltage grids
+    ("1-HV-mixed--0-sw", sb.get_simbench_net("1-HV-mixed--0-sw")),
+    ("1-HV-mixed--1-sw", sb.get_simbench_net("1-HV-mixed--1-sw")),
+    ("1-HV-urban--0-sw", sb.get_simbench_net("1-HV-urban--0-sw")),
+    ("1-HV-urban--1-sw", sb.get_simbench_net("1-HV-urban--1-sw")),
+    # # #
+    # # # # Low-voltage grids
+    ("1-LV-rural1--0-sw", sb.get_simbench_net("1-LV-rural1--0-sw")),
+    ("1-LV-rural2--0-sw", sb.get_simbench_net("1-LV-rural2--0-sw")),
+    ("1-LV-rural2--1-sw", sb.get_simbench_net("1-LV-rural2--1-sw")),
+    ("1-LV-rural2--2-sw", sb.get_simbench_net("1-LV-rural2--2-sw")),
+    ("1-LV-rural3--0-sw", sb.get_simbench_net("1-LV-rural3--0-sw")),
+    ("1-LV-rural3--1-sw", sb.get_simbench_net("1-LV-rural3--1-sw")),
+    ("1-LV-rural3--2-sw", sb.get_simbench_net("1-LV-rural3--2-sw")),
+    ("1-LV-semiurb4--0-sw", sb.get_simbench_net("1-LV-semiurb4--0-sw")),
+    ("1-LV-semiurb4--1-sw", sb.get_simbench_net("1-LV-semiurb4--1-sw")),
+    ("1-LV-semiurb4--2-sw", sb.get_simbench_net("1-LV-semiurb4--2-sw")),
+    ("1-LV-semiurb5--0-sw", sb.get_simbench_net("1-LV-semiurb5--0-sw")),
+    ("1-LV-semiurb5--1-sw", sb.get_simbench_net("1-LV-semiurb5--1-sw")),
+    ("1-LV-semiurb5--2-sw", sb.get_simbench_net("1-LV-semiurb5--2-sw")),
+    ("1-LV-urban6--0-sw", sb.get_simbench_net("1-LV-urban6--0-sw")),
+    ("1-LV-urban6--1-sw", sb.get_simbench_net("1-LV-urban6--1-sw")),
+    ("1-LV-urban6--2-sw", sb.get_simbench_net("1-LV-urban6--2-sw")),
+    # #
+    # # # # Medium-voltage grids (not already added)
+    ("1-MV-comm--0-sw", sb.get_simbench_net("1-MV-comm--0-sw")),
+    ("1-MV-comm--1-sw", sb.get_simbench_net("1-MV-comm--1-sw")),
+    ("1-MV-comm--2-sw", sb.get_simbench_net("1-MV-comm--2-sw")),
+    ("1-MV-rural--0-sw", sb.get_simbench_net("1-MV-rural--0-sw")),
+    ("1-MV-rural--1-sw", sb.get_simbench_net("1-MV-rural--1-sw")),
+    ("1-MV-rural--2-sw", sb.get_simbench_net("1-MV-rural--2-sw")),
+    ("1-MV-semiurb--0-sw", sb.get_simbench_net("1-MV-semiurb--0-sw")),
+    ("1-MV-semiurb--1-sw", sb.get_simbench_net("1-MV-semiurb--1-sw")),
+    ("1-MV-semiurb--2-sw", sb.get_simbench_net("1-MV-semiurb--2-sw")),
+    ("1-MV-urban--0-sw", sb.get_simbench_net("1-MV-urban--0-sw")),
+    ("1-MV-urban--1-sw", sb.get_simbench_net("1-MV-urban--1-sw")),
+    ("1-MV-urban--2-sw", sb.get_simbench_net("1-MV-urban--2-sw")),
+#
+
 ]
 
 # Get all available SimBench codes
 all_codes = sb.collect_all_simbench_codes()
 
 # # Filter for codes that represent combined MV+LV grids
-# mv_lv_codes = [code for code in all_codes if "MVLV" in code]
+mv_lv_codes = [code for code in all_codes if "MVLV" in code]
 
 # Optionally, you can print them to see what’s available:
 #print("Found MV+LV codes:", mv_lv_codes)
@@ -263,7 +303,10 @@ all_codes = sb.collect_all_simbench_codes()
 hv_mv_codes = [code for code in all_codes if code.startswith("1-HVMV-")]
 #
 # # Filter for combined MV+LV codes that only contain MV and LV (not extra levels)
-# mv_lv_codes = [code for code in all_codes if code.startswith("1-MVLV-")]
+mv_lv_codes = [code for code in all_codes if code.startswith("1-MVLV-")]
+
+# # Filter for combined MV+LV codes that only contain MV and LV (not extra levels)
+hv_lv_codes = [code for code in all_codes if code.startswith("1-HVLV-")]
 
 # print("Found HV+MV codes:", hv_mv_codes)
 # print("Found MV+LV codes:", mv_lv_codes)
@@ -273,17 +316,26 @@ for code in hv_mv_codes: #+ mv_lv_codes:
     test_grids.append((code, lambda code=code: sb.get_simbench_net(code)))
 #
 # # Append these MV+LV codes to your test_grids list
-# for code in mv_lv_codes:
-#     test_grids.append((
-#         code,
-#         lambda code=code: sb.get_simbench_net(code)
-#     ))
+for code in mv_lv_codes:
+    test_grids.append((
+        code,
+        lambda code=code: sb.get_simbench_net(code)
+    ))
+
+for code in hv_lv_codes:
+    test_grids.append((
+        code,
+        lambda code=code: sb.get_simbench_net(code)
+    ))
 
 # Combine all SimBench codes:
 all_simbench_codes = basic_codes
 
 # Store the results
 results = []
+
+# Dictionary to store results
+negative_loads_result = {}
 
 # Now add each SimBench grid as (name, loader_function)
 for sb_code in all_simbench_codes:
@@ -293,7 +345,24 @@ for sb_code in all_simbench_codes:
         lambda code=sb_code: sb.get_simbench_net(code)
     ))
 
-print("\n--- OPF Convergence Test for Pandapower Grids ---\n")
+#print("\n--- OPF Convergence Test for Pandapower Grids ---\n")
+
+# Iterate through each grid
+
+for grid_name, grid_func in test_grids:
+    print(f"Testing {grid_name} ...")
+    try:
+        net = grid_func()
+        # Check for negative active or reactive power in load table
+        has_negative = ((net.load.p_mw < 0) | (net.load.q_mvar < 0)).any()
+        negative_loads_result[grid_name] = has_negative
+    except Exception as e:
+         negative_loads_result[grid_name] = f"Error: {e}"
+
+# Convert to DataFrame for nicer formatting
+df = pd.DataFrame.from_dict(negative_loads_result, orient='index', columns=["Has Negative Loads"])
+print(df)
+
 
 # Iterate through all test grids
 for grid_name, grid_func in test_grids:
@@ -376,7 +445,6 @@ for grid_name, grid_func in test_grids:
     if "max_loading_percent"  in net.line.columns:
         # Set a default loading percent for all lines (e.g., 100%)
         net.line["max_loading_percent"] *=1.5
-
 
     try:
         # Run Power Flow first
@@ -461,4 +529,19 @@ df_results.sort_values(by="Grid", inplace=True)
 
 # Display the complete summary table
 print(df_results.to_string(index=False))
-df_results.to_excel("Results OPP.xlsx", sheet_name="Results", index=False)
+df_results.to_excel("Results with line limits increased OPP.xlsx", sheet_name="Results", index=False)
+
+# # Load a SimBench network (e.g., Medium Voltage - Low Voltage urban example)
+# net = sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw")
+#
+# # Focus on OPF-related columns in the load table
+# opf_columns = ["min_p_mw", "max_p_mw", "min_q_mvar", "max_q_mvar"]
+# load_df = net.load
+#
+# # Check which columns exist and inspect their values
+# for col in opf_columns:
+#     if col in load_df.columns:
+#         print(f"\nColumn: {col}")
+#         print(load_df[col].value_counts(dropna=False))
+#     else:
+#         print(f"\nColumn: {col} not present in the load table.")

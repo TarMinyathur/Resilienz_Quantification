@@ -163,8 +163,14 @@ def calculate_load_disparity(net_temp_disp):
             axis=1
         )
 
-    # Replace remaining NaN values with zeros
-    net_temp_disp.load.fillna(0, inplace=True)
+    # Liste der OPF-relevanten Spalten, die NICHT verändert werden sollen
+    opf_cols = ["min_p_mw", "max_p_mw", "min_q_mvar", "max_q_mvar"]
+
+    # Alle Spalten der Load-Tabelle, außer den OPF-Spalten
+    non_opf_cols = [col for col in net_temp_disp.load.columns if col not in opf_cols]
+
+    # Nur in diesen Spalten NaN mit 0 ersetzen
+    net_temp_disp.load[non_opf_cols] = net_temp_disp.load[non_opf_cols].fillna(0)
 
     # Prepare data for disparity calculation
     load_data = net_temp_disp.load[['p_mw', 'q_mvar', 'sn_mva']].copy()
@@ -230,9 +236,12 @@ def calculate_transformer_disparity(net_temp_disp, debug=False):
         if column not in net_temp_disp.trafo.columns:
             raise ValueError(f"Ensure that '{column}' column exists in net_temp_disp.trafo")
 
-    # Data Cleaning: Ensure all required columns are numeric and fill NaN with zero
+    # Data Cleaning: Only convert and fill NaN for required columns
     for column in required_columns:
-        net_temp_disp.trafo[column] = pd.to_numeric(net_temp_disp.trafo[column], errors='coerce').fillna(0)
+        net_temp_disp.trafo.loc[:, column] = (
+            pd.to_numeric(net_temp_disp.trafo[column], errors='coerce')
+            .fillna(0)
+        )
 
     # Get bus geodata
     if not {'x', 'y'}.issubset(net_temp_disp.bus_geodata.columns):

@@ -28,196 +28,52 @@ import pandapower.converter as pc
 import simbench as sb
 import pandapower as pp
 
-# Dictionary to including all grid names to functions, including special cases for test grids, whose opp converges
 grids = {
-    # "GBreducednetwork": pn.GBreducednetwork,
-    # "case118": pn.case118,
-    # "case14": pn.case14,
-    # "case24_ieee_rts": pn.case24_ieee_rts,
-    # "case30": pn.case30,
-    # "case33bw": pn.case33bw,
-    # "case39": pn.case39,
-    # "case5": pn.case5,
-    # "case6ww": pn.case6ww,
-    # "case9": pn.case9,
-    # "create_cigre_network_lv": pn.create_cigre_network_lv,
-    # #"create_cigre_network_mv": pn.create_cigre_network_mv,
-    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
-    # # #"create_cigre_network_mv_pv_wind": lambda: pn.create_cigre_network_mv(with_der="pv_wind"),
-    # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
-    # #
-    # # # Special Cases with Adjustments
-    # # # "mv_all_high10": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=10),
-    # # # "mv_all_high5": lambda: increase_generation(pn.create_cigre_network_mv(with_der="all"), factor=5),
-    # #
-    # # "example_multivoltage": lambda: increase_line_limits(pn.example_multivoltage(), 1.5),
-    # # "example_simple": lambda: increase_line_limits(pn.example_simple(), 1.5),
-    # # "mv_oberrhein": lambda: increase_line_limits(pn.mv_oberrhein(), 1.5),
-    # #
-    # # # # High-voltage grids
-    "1-HV-mixed--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--0-sw"), 1.5),
-    # # "1-HV-mixed--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-mixed--1-sw"), 1.5),
-    # # "1-HV-urban--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--0-sw"), 1.5),
-    # # "1-HV-urban--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-HV-urban--1-sw"), 1.5),
-    # # #
-    # # # # Low-voltage grids
-    # # "1-LV-rural1--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural1--0-sw"), 1.5),
-    # # "1-LV-rural2--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural2--0-sw"), 1.5),
-    # # "1-LV-rural2--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural2--1-sw"), 1.5),
-    # # "1-LV-rural2--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural2--2-sw"), 1.5),
-    # # "1-LV-rural3--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural3--0-sw"), 1.5),
-    # # "1-LV-rural3--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural3--1-sw"), 1.5),
-    # # "1-LV-rural3--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-rural3--2-sw"), 1.5),
-    # # "1-LV-semiurb4--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb4--0-sw"), 1.5),
-    # # "1-LV-semiurb4--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb4--1-sw"), 1.5),
-    # # "1-LV-semiurb4--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb4--2-sw"), 1.5),
-    # # "1-LV-semiurb5--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb5--0-sw"), 1.5),
-    # # "1-LV-semiurb5--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb5--1-sw"), 1.5),
-    # # "1-LV-semiurb5--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-semiurb5--2-sw"), 1.5),
-    # # "1-LV-urban6--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--0-sw"), 1.5),
-    # # "1-LV-urban6--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--1-sw"), 1.5),
-    # # "1-LV-urban6--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-LV-urban6--2-sw"), 1.5),
-    # #
-    # # # Medium-voltage grids (not already added)
-     "1-MV-comm--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--0-sw"), 1.5),
-    # # "1-MV-comm--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--1-sw"), 1.5),
-    # # "1-MV-comm--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-comm--2-sw"), 1.5),
-    # # "1-MV-rural--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--0-sw"), 1.5),
-    # # "1-MV-rural--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--1-sw"), 1.5),
-    # # "1-MV-rural--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-rural--2-sw"), 1.5),
-    # # "1-MV-semiurb--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-semiurb--0-sw"), 1.5),
-    # # "1-MV-semiurb--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-semiurb--1-sw"), 1.5),
-    # # "1-MV-semiurb--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-semiurb--2-sw"), 1.5),
-    # # "1-MV-urban--0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--0-sw"), 1.5),
-    # # "1-MV-urban--1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--1-sw"), 1.5),
-    # # "1-MV-urban--2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MV-urban--2-sw"), 1.5),
-    # #
-    # # # -- HVMV-mixed grids --
-    "1-HVMV-mixed-1.105-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-0-no_sw"), 1.5),
-    # # "1-HVMV-mixed-1.105-0-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-0-sw"), 1.5),
-    # # "1-HVMV-mixed-1.105-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-1-no_sw"), 1.5),
-    # # "1-HVMV-mixed-1.105-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-1.105-1-sw"), 1.5),
-    # # "1-HVMV-mixed-2.102-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-2.102-1-no_sw"), 1.5),
-    # # "1-HVMV-mixed-2.102-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-2.102-1-sw"), 1.5),
-    # # "1-HVMV-mixed-4.101-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-4.101-1-no_sw"), 1.5),
-    # # "1-HVMV-mixed-4.101-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-4.101-1-sw"), 1.5),
-    # # # "1-HVMV-mixed-all-1-no_sw":   lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-all-1-no_sw"), 1.5),
-    # # # "1-HVMV-mixed-all-1-sw":      lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-mixed-all-1-sw"), 1.5),
-    #
-    # # # -- HVMV-urban grids --
-    # # "1-HVMV-urban-2.203-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-2.203-0-no_sw"), 1.5),
-    # # "1-HVMV-urban-2.203-0-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-2.203-0-sw"), 1.5),
-    # # "1-HVMV-urban-2.203-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-2.203-1-no_sw"), 1.5),
-    # # "1-HVMV-urban-2.203-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-2.203-1-sw"), 1.5),
-    # # "1-HVMV-urban-3.201-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-3.201-0-no_sw"), 1.5),
-    # # "1-HVMV-urban-3.201-0-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-3.201-0-sw"), 1.5),
-    # # "1-HVMV-urban-3.201-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-3.201-1-no_sw"), 1.5),
-    # # "1-HVMV-urban-3.201-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-3.201-1-sw"), 1.5),
-    # # "1-HVMV-urban-4.201-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-4.201-0-no_sw"), 1.5),
-    # # "1-HVMV-urban-4.201-0-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-4.201-0-sw"), 1.5),
-    # # "1-HVMV-urban-4.201-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-4.201-1-no_sw"), 1.5),
-    # # "1-HVMV-urban-4.201-1-sw":    lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-4.201-1-sw"), 1.5),
-    # # # "1-HVMV-urban-all-0-no_sw":   lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-all-0-no_sw"), 1.5),
-    # # # "1-HVMV-urban-all-0-sw":      lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-all-0-sw"), 1.5),
-    # # # "1-HVMV-urban-all-1-no_sw":   lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-all-1-no_sw"), 1.5),
-    # # # "1-HVMV-urban-all-1-sw":      lambda: increase_line_limits(sb.get_simbench_net("1-HVMV-urban-all-1-sw"), 1.5),
-    # # #
-    # # # # MVLV grids – Combined medium and low voltage
-    # #  "1-MVLV-comm-3.403-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-0-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-3.403-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-0-sw"), 1.5),
-    # # "1-MVLV-comm-3.403-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-1-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-3.403-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-1-sw"), 1.5),
-    # # "1-MVLV-comm-3.403-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-2-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-3.403-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-3.403-2-sw"), 1.5),
-    # # "1-MVLV-comm-4.416-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-0-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-4.416-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-0-sw"), 1.5),
-    # # "1-MVLV-comm-4.416-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-1-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-4.416-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-1-sw"), 1.5),
-    # # "1-MVLV-comm-4.416-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-2-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-4.416-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-4.416-2-sw"), 1.5),
-    # # "1-MVLV-comm-5.401-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-0-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-5.401-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-0-sw"), 1.5),
-    # # "1-MVLV-comm-5.401-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-1-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-5.401-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-1-sw"), 1.5),
-    # # "1-MVLV-comm-5.401-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-2-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-5.401-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-5.401-2-sw"), 1.5),
-    # # #"1-MVLV-comm-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-all-0-no_sw"), 1.5),
-    # # # #"1-MVLV-comm-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-comm-all-0-sw"), 1.5),
-    # # #
-    # # "1-MVLV-rural-1.108-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-1.108-0-no_sw"), 1.5),
-    # # "1-MVLV-rural-1.108-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-1.108-0-sw"), 1.5),
-    # #
-     "1-MVLV-rural-2.107-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"), 1.5),
-    # # #"1-MVLV-rural-2.107-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-0-sw"), 1.5),
-    # "1-MVLV-rural-2.107-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-1-no_sw"), 1.5),
-    # # #"1-MVLV-rural-2.107-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-1-sw"), 1.5),
-    # "1-MVLV-rural-2.107-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-2-no_sw"), 1.5),
-    # # #"1-MVLV-rural-2.107-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-2.107-2-sw"), 1.5),
-    # "1-MVLV-rural-4.101-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-0-no_sw"), 1.5),
-    # # #"1-MVLV-rural-4.101-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-0-sw"), 1.5),
-    # "1-MVLV-rural-4.101-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-1-no_sw"), 1.5),
-    # # #"1-MVLV-rural-4.101-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-1-sw"), 1.5),
-    # "1-MVLV-rural-4.101-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-2-no_sw"), 1.5),
-    # #"1-MVLV-rural-4.101-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-4.101-2-sw"), 1.5),
-    # "1-MVLV-rural-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-all-0-no_sw"), 1.5),
-    # #"1-MVLV-rural-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-rural-all-0-sw"), 1.5),
-    #
-     "1-MVLV-semiurb-3.202-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),1.5),
-    # # #"1-MVLV-semiurb-3.202-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-0-sw"), 1.5),
-    # "1-MVLV-semiurb-3.202-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-1-no_sw"), 1.5),
-    # #"1-MVLV-semiurb-3.202-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-1-sw"), 1.5),
-    # "1-MVLV-semiurb-3.202-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-2-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-3.202-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-3.202-2-sw"), 1.5),
-    # "1-MVLV-semiurb-4.201-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-0-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-4.201-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-0-sw"), 1.5),
-    # "1-MVLV-semiurb-4.201-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-1-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-4.201-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-1-sw"), 1.5),
-    # "1-MVLV-semiurb-4.201-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-2-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-4.201-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-4.201-2-sw"), 1.5),
-    # "1-MVLV-semiurb-5.220-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-0-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-5.220-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-0-sw"), 1.5),
-    # "1-MVLV-semiurb-5.220-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-1-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-5.220-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-1-sw"), 1.5),
-    # "1-MVLV-semiurb-5.220-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-2-no_sw"),
-    #                                                              1.5),
-    # #"1-MVLV-semiurb-5.220-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-5.220-2-sw"), 1.5),
-    # #"1-MVLV-semiurb-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-all-0-no_sw"), 1.5),
-    # #"1-MVLV-semiurb-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-semiurb-all-0-sw"), 1.5),
-    # #
-    # # # Urban MVLV grids
-      "1-MVLV-urban-5.303-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"), 1.5),
-    # #"1-MVLV-urban-5.303-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-0-sw"), 1.5),
-    # "1-MVLV-urban-5.303-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-1-no_sw"), 1.5),
-    # #"1-MVLV-urban-5.303-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-1-sw"), 1.5),
-    # "1-MVLV-urban-5.303-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-2-no_sw"), 1.5),
-    # #"1-MVLV-urban-5.303-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-5.303-2-sw"), 1.5),
-    # "1-MVLV-urban-6.305-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-0-no_sw"), 1.5),
-    # #"1-MVLV-urban-6.305-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-0-sw"), 1.5),
-    # "1-MVLV-urban-6.305-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-1-no_sw"), 1.5),
-    # #"1-MVLV-urban-6.305-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-1-sw"), 1.5),
-    # "1-MVLV-urban-6.305-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-2-no_sw"), 1.5),
-    # #"1-MVLV-urban-6.305-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.305-2-sw"), 1.5),
-    # "1-MVLV-urban-6.309-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-0-no_sw"), 1.5),
-    # #"1-MVLV-urban-6.309-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-0-sw"), 1.5),
-    # "1-MVLV-urban-6.309-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-1-no_sw"), 1.5),
-    # #"1-MVLV-urban-6.309-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-1-sw"), 1.5),
-    # "1-MVLV-urban-6.309-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-2-no_sw"), 1.5),
-    # #"1-MVLV-urban-6.309-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-6.309-2-sw"), 1.5),
-    # #"1-MVLV-urban-all-0-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-0-no_sw"), 1.5),
-    # #"1-MVLV-urban-all-0-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-0-sw"), 1.5),
-    # #"1-MVLV-urban-all-1-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-1-no_sw"), 1.5),
-    # #"1-MVLV-urban-all-1-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-1-sw"), 1.5),
-    # #"1-MVLV-urban-all-2-no_sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-2-no_sw"), 1.5),
-    # #"1-MVLV-urban-all-2-sw": lambda: increase_line_limits(sb.get_simbench_net("1-MVLV-urban-all-2-sw"), 1.5),
-
-    # local saved grids
-    #"caseIEEE37_DG": lambda: use_local_grid("caseIEEE37_DG.m")
+    "1-HV-mixed--0-sw": lambda: sb.get_simbench_net("1-HV-mixed--0-sw"),
+    "1-HV-mixed--1-sw": lambda: sb.get_simbench_net("1-HV-mixed--1-sw"),
+    "1-HV-urban--0-sw": lambda: sb.get_simbench_net("1-HV-urban--0-sw"),
+    "1-HV-urban--1-sw": lambda: sb.get_simbench_net("1-HV-urban--1-sw"),
+    "1-HVMV-mixed-1.105-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-1.105-0-sw"),
+    "1-HVMV-mixed-1.105-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-1.105-1-no_sw"),
+    "1-HVMV-mixed-2.102-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-0-sw"),
+    "1-HVMV-mixed-2.102-1-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-1-sw"),
+    "1-HVMV-mixed-4.101-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-0-sw"),
+    "1-HVMV-mixed-4.101-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-1-no_sw"),
+    "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
+    "1-HVMV-urban-2.203-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-0-no_sw"),
+    "1-HVMV-urban-2.203-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-1-sw"),
+    "1-HVMV-urban-3.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-0-no_sw"),
+    "1-HVMV-urban-3.201-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-1-sw"),
+    "1-HVMV-urban-4.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-4.201-0-no_sw"),
+    "1-HVMV-urban-4.201-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-4.201-1-sw"),
+    "1-HVMV-urban-all-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-all-0-no_sw"),
+    "1-MV-comm--0-sw": lambda: sb.get_simbench_net("1-MV-comm--0-sw"),
+    "1-MV-comm--1-sw": lambda: sb.get_simbench_net("1-MV-comm--1-sw"),
+    "1-MV-comm--2-sw": lambda: sb.get_simbench_net("1-MV-comm--2-sw"),
+    "1-MV-rural--0-sw": lambda: sb.get_simbench_net("1-MV-rural--0-sw"),
+    "1-MV-rural--1-sw": lambda: sb.get_simbench_net("1-MV-rural--1-sw"),
+    "1-MV-urban--0-sw": lambda: sb.get_simbench_net("1-MV-urban--0-sw"),
+    "1-MV-urban--1-sw": lambda: sb.get_simbench_net("1-MV-urban--1-sw"),
+    "1-MV-urban--2-sw": lambda: sb.get_simbench_net("1-MV-urban--2-sw"),
+    "1-MVLV-comm-3.403-0-sw": lambda: sb.get_simbench_net("1-MVLV-comm-3.403-0-sw"),
+    "1-MVLV-comm-3.403-1-no_sw": lambda: sb.get_simbench_net("1-MVLV-comm-3.403-1-no_sw"),
+    "1-MVLV-rural-2.107-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"),
+    "1-MVLV-semiurb-3.202-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),
+    "1-MVLV-urban-5.303-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"),
+    "GBreducednetwork": pn.GBreducednetwork,
+    "case118": pn.case118,
+    "case14": pn.case14,
+    "case24_ieee_rts": pn.case24_ieee_rts,
+    "case30": pn.case30,
+    "case33bw": pn.case33bw,
+    "case39": pn.case39,
+    "case5": pn.case5,
+    "case6ww": pn.case6ww,
+    "case9": pn.case9,
+    "create_cigre_network_lv": pn.create_cigre_network_lv,
+    "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    "example_simple": lambda: increase_line_limits(pn.example_simple(), 1.5),
+    "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
 }
 
 
@@ -269,7 +125,7 @@ def use_local_grid(grid_name):
 # Configuration
 basic = {
     "Adjustments": True,
-    "Overview_Grid": True
+    "Overview_Grid": False
 }
 
 selected_indicators = {
@@ -340,16 +196,33 @@ def run_analysis_for_single_grid(grid_name):
         # Count elements and scaled elements
         element_counts = count_elements(net)
         # Print both counts in one row
+        # Focus on OPF-related columns in the load table
+
+        opf_columns = ["min_p_mw", "max_p_mw", "min_q_mvar", "max_q_mvar"]
+        load_df = net.load
+
+        # Check which columns exist and inspect their values
+        for col in opf_columns:
+            if col in load_df.columns:
+                print(f"\nColumn: {col}")
+                print(load_df[col].value_counts(dropna=False))
+            else:
+                print(f"\nColumn: {col} not present in the load table.")
         print(net)
 
-        print(net.bus)
-        print(net.trafo)
-        print(net.line)
+        #print(net.bus)
+        #print(net.trafo)
+        #print(net.line)
 
         # print("Generators:")
-        print(net.gen)
-        print(net.sgen)
-        print(net.storage)
+        #print("gen")
+        #print(net.gen)
+        #print("sgen")
+        #print(net.sgen)
+        #print("storage")
+        #print(net.storage)
+        print("load")
+        print(net.load)
 
 
     if basic["Adjustments"]:
@@ -362,20 +235,24 @@ def run_analysis_for_single_grid(grid_name):
                 value["active"] = True
 
     if net.bus_geodata.empty:
-        selected_scenario["Flood"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 2)
+        if selected_scenario["Flood"]["active"] == True:
+            selected_scenario["Flood"]["active"] = False
+            dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 2)
 
     if net.trafo.empty:
-        selected_scenario["sabotage_trafo"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 2)
+        if selected_scenario["sabotage_trafo"]["active"] == True:
+            selected_scenario["sabotage_trafo"]["active"] = False
+            dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 2)
 
     if net.sgen.empty or not net.sgen["type"].str.contains("fuel cell", case=False, na=False).any():
-        selected_scenario["Geopolitical_h2"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 2)
+        if selected_scenario["Geopolitical_h2"]["active"] == True:
+            selected_scenario["Geopolitical_h2"]["active"] = False
+            dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 2)
 
     if net.sgen.empty or not net.sgen["type"].str.contains("CHP|Gasturbine", case=False, na=False).any():
-        selected_scenario["Geopolitical_gas"]["active"] = False
-        dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_gas", 2)
+        if selected_scenario["Geopolitical_gas"]["active"] == True:
+            selected_scenario["Geopolitical_gas"]["active"] = False
+            dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_gas", 2)
 
     if selected_indicators["all"]:
         # Setze alle anderen Indikatoren auf True
@@ -679,8 +556,6 @@ def run_analysis_for_single_grid(grid_name):
         print("Results for Indicators:")
         print(dfinalresults)
 
-
-    
     if selected_scenario["stress_scenario"]:
 
         for scenario, params in selected_scenario.items():
