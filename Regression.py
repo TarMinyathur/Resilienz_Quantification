@@ -140,6 +140,9 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             ci_low, ci_high = conf_int.loc[idx]
             conf_str_series[idx] = f"[{ci_low:.3f}, {ci_high:.3f}]"
 
+        # --- 4) Series für t-Werte ---
+        tvalues_series = model_ols.tvalues.drop('const', errors='ignore').round(4)
+
         # Erst für alle gelöschten Variablen NaN setzen ...
         for col in indikatoren_spalten:
             if col not in X_n.columns:
@@ -151,6 +154,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         # ... und dann die noch vorhandenen Variablen bestücken:
         df_results.loc[params.index, f'coeff_{szenario}'] = params_stars_series
         df_results.loc[std_errors.index, f'std_error_{szenario}'] = std_errors.round(4)
+        df_results.loc[tvalues_series.index, f't_value_{szenario}'] = tvalues_series
         df_results.loc[pvalues.index, f'P>t_{szenario}'] = pvalues_stars_series
         df_results.loc[conf_int.index, f'conf_int_{szenario}'] = conf_str_series
 
@@ -158,15 +162,51 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         plot_regression(model_ols, szenario, X_n.columns, output_dir, excluded_info)
         save_summary(model_ols, szenario, output_dir)
 
+        # === Modellmetriken sammeln ===
+        df_results.loc['__R2__', f'coeff_{szenario}'] = round(model_ols.rsquared, 4)
+        df_results.loc['__AdjR2__', f'coeff_{szenario}'] = round(model_ols.rsquared_adj, 4)
+        df_results.loc['__F-stat__', f'coeff_{szenario}'] = round(model_ols.fvalue, 4)
+        df_results.loc['__F-pval__', f'coeff_{szenario}'] = round(model_ols.f_pvalue, 4)
+        df_results.loc['__AIC__', f'coeff_{szenario}'] = round(model_ols.aic, 4)
+        df_results.loc['__BIC__', f'coeff_{szenario}'] = round(model_ols.bic, 4)
+        df_results.loc['__LogLik__', f'coeff_{szenario}'] = round(model_ols.llf, 4)
+        df_results.loc['__n_obs__', f'coeff_{szenario}'] = int(model_ols.nobs)
+
+    # Optional: sprechendere Bezeichnungen für Metrik-Zeilen
+    df_results.rename(index={
+        '__R2__': 'R² (Modellgüte)',
+        '__AdjR2__': 'Adj. R²',
+        '__F-stat__': 'F-Statistik',
+        '__F-pval__': 'F-Test p-Wert',
+        '__AIC__': 'AIC',
+        '__BIC__': 'BIC',
+        '__LogLik__': 'Log-Likelihood',
+        '__n_obs__': 'Anzahl Beobachtungen'
+    }, inplace=True)
+
     # Ausgabe der zusammengefassten Ergebnisse in der Konsole
     print("\nTabellarische Zusammenfassung der Ergebnisse:")
     print(df_results.to_string())
 
     # Excel Export am Ende
     export_path = os.path.join(output_dir, "regression_results.xlsx")
-    df_results.to_excel(export_path)
-    print(f"Gesamtergebnis-DataFrame wurde als Excel exportiert: {export_path}")
+    with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
+        df_results.to_excel(writer, sheet_name='Regressionsdetails')
+        # Optional: separate Tabelle mit nur den Modellmetriken
+        # === Separate Tabelle für Modellmetriken ===
+        df_model_metrics = df_results.loc[df_results.index.str.startswith("R²") |
+                                          df_results.index.str.startswith("Adj.") |
+                                          df_results.index.str.startswith("F-") |
+                                          df_results.index.str.startswith("AIC") |
+                                          df_results.index.str.startswith("BIC") |
+                                          df_results.index.str.startswith("Log-") |
+                                          df_results.index.str.startswith("Anzahl")]
 
+        # Transponieren für bessere Lesbarkeit (jede Zeile = Szenario)
+        df_model_metrics = df_model_metrics.rename_axis("Metric").transpose()
+        df_model_metrics.to_excel(writer, sheet_name='Modellmetriken')
+
+    print(f"Gesamtergebnis-DataFrame wurde als Excel exportiert: {export_path}")
     return ergebnisse_szenarien
 
 
@@ -245,7 +285,7 @@ def save_summary(model_ols, szenario, output_dir):
 
 def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final.xlsx"
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP.xlsx"
 
     # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"

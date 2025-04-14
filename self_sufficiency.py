@@ -155,7 +155,7 @@ def selfsufficiency_neu(net_temp_selfsuff_2, reduction_factor=0.95, verbose=True
         except pp.optimal_powerflow.OPFNotConverged:
             print("OPF konvergiert nicht mehr bei folgenden Werten!")
             print(net_temp_selfsuff_2.ext_grid)
-            print(net_temp_selfsuff_2.load)
+            #print(net_temp_selfsuff_2.load)
             break
 
     # Resultat berechnen

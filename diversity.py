@@ -1,6 +1,7 @@
 # diversity.py
 
 import numpy as np
+import pandas as pd
 
 def calculate_shannon_evenness_and_variety(data, max_known_types):
     """

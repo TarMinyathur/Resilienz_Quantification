@@ -27,6 +27,7 @@ import os
 import pandapower.converter as pc
 import simbench as sb
 import pandapower as pp
+from openpyxl import load_workbook
 
 grids = {
     "1-HV-mixed--0-sw": lambda: sb.get_simbench_net("1-HV-mixed--0-sw"),
@@ -39,7 +40,7 @@ grids = {
     "1-HVMV-mixed-2.102-1-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-1-sw"),
     "1-HVMV-mixed-4.101-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-0-sw"),
     "1-HVMV-mixed-4.101-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-1-no_sw"),
-    "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
+
     "1-HVMV-urban-2.203-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-0-no_sw"),
     "1-HVMV-urban-2.203-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-1-sw"),
     "1-HVMV-urban-3.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-0-no_sw"),
@@ -74,6 +75,9 @@ grids = {
     "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
     "example_simple": lambda: increase_line_limits(pn.example_simple(), 1.5),
     "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
+    "mv_oberrhein": pn.mv_oberrhein,
+    "example_multivoltage": pn.example_multivoltage,
+    "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
 }
 
 
@@ -143,9 +147,9 @@ selected_indicators = {
     "Disparity Loads": True,
     "Disparity Transformers": True,
     "Disparity Lines": True,
-    "N-3 Redundancy": True,
+    "N-3 Redundancy": False,
     "n_3_redundancy_print": False,
-    "Redundancy": True,
+    "Redundancy": False,
     "GraphenTheorie": True,
     "Flexibility": True,
     "Flexibility_fxor": True,
@@ -165,8 +169,8 @@ selected_scenario = {
     "Fire": {"active": False, "runs": 20},
     "Line Overload": {"active": False, "runs": 10},
     "IT-Attack": {"active": False, "runs": 20},
-    "Geopolitical_gas": {"active": True, "runs": 10},
-    "Geopolitical_h2": {"active": True, "runs": 10},
+    "Geopolitical_gas": {"active": False, "runs": 10},
+    "Geopolitical_h2": {"active": False, "runs": 10},
     "high_EE_generation": {"active": True, "runs": 25},
     "high_load": {"active": True, "runs": 25},
     "sabotage_trafo": {"active": True, "runs": 20},
@@ -238,11 +242,11 @@ def run_analysis_for_single_grid(grid_name):
         if selected_scenario["Flood"]["active"] == True:
             selected_scenario["Flood"]["active"] = False
             dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 2)
-
-    if net.trafo.empty:
-        if selected_scenario["sabotage_trafo"]["active"] == True:
-            selected_scenario["sabotage_trafo"]["active"] = False
-            dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 2)
+    #
+    # if net.trafo.empty:
+    #     if selected_scenario["sabotage_trafo"]["active"] == True:
+    #         selected_scenario["sabotage_trafo"]["active"] = False
+    #         dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 2)
 
     if net.sgen.empty or not net.sgen["type"].str.contains("fuel cell", case=False, na=False).any():
         if selected_scenario["Geopolitical_h2"]["active"] == True:
@@ -617,15 +621,23 @@ def run_analysis_for_single_grid(grid_name):
         output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
         output_path = os.path.join(output_dir, output_filename)
 
-        # ExcelWriter verwenden, um mehrere Sheets in eine Datei zu schreiben
-        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-            if selected_indicators.get("output_excel"):
-                dfresultsscenario.T.to_excel(writer, sheet_name="Results Scenario", index=False)
+        # Liste der Sheets, die überschrieben werden dürfen: Sheet-Überschreibung erfolgt nur, wenn selected_indicators["output_excel"] aktiviert ist und das entsprechende Sheet in overwrite_sheets steht.
+        overwrite_sheets = ["Results Scenario"]
 
-            if selected_indicators["output_excel"]:
-                dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
+        file_exists = os.path.exists(output_path)
 
+        if file_exists:
+            with pd.ExcelWriter(output_path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+                if selected_indicators.get("output_excel") and "Results Scenario" in overwrite_sheets:
+                    dfresultsscenario.T.to_excel(writer, sheet_name="Results Scenario", index=False)
 
+                if selected_indicators.get("output_excel") and "Results Indicator" in overwrite_sheets:
+                    dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
+        else:
+            with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+                if selected_indicators.get("output_excel"):
+                    dfresultsscenario.T.to_excel(writer, sheet_name="Results Scenario", index=False)
+                    dfinalresults.T.to_excel(writer, sheet_name="Results Indicator", index=False)
 
 def run_all_grids(start_time):
     """
