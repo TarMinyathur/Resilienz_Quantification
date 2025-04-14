@@ -162,27 +162,23 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         plot_regression(model_ols, szenario, X_n.columns, output_dir, excluded_info)
         save_summary(model_ols, szenario, output_dir)
 
-        # === Modellmetriken sammeln ===
-        df_results.loc['__R2__', f'coeff_{szenario}'] = round(model_ols.rsquared, 4)
-        df_results.loc['__AdjR2__', f'coeff_{szenario}'] = round(model_ols.rsquared_adj, 4)
-        df_results.loc['__F-stat__', f'coeff_{szenario}'] = round(model_ols.fvalue, 4)
-        df_results.loc['__F-pval__', f'coeff_{szenario}'] = round(model_ols.f_pvalue, 4)
-        df_results.loc['__AIC__', f'coeff_{szenario}'] = round(model_ols.aic, 4)
-        df_results.loc['__BIC__', f'coeff_{szenario}'] = round(model_ols.bic, 4)
-        df_results.loc['__LogLik__', f'coeff_{szenario}'] = round(model_ols.llf, 4)
-        df_results.loc['__n_obs__', f'coeff_{szenario}'] = int(model_ols.nobs)
+        # === Modellmetriken in separatem DataFrame sammeln ===
+        if 'df_model_metrics' not in locals():
+            df_model_metrics = pd.DataFrame(columns=[
+                "R² (Modellgüte)", "Adj. R²", "F-Statistik", "F-Test p-Wert",
+                "AIC", "BIC", "Log-Likelihood", "Anzahl Beobachtungen"
+            ])
 
-    # Optional: sprechendere Bezeichnungen für Metrik-Zeilen
-    df_results.rename(index={
-        '__R2__': 'R² (Modellgüte)',
-        '__AdjR2__': 'Adj. R²',
-        '__F-stat__': 'F-Statistik',
-        '__F-pval__': 'F-Test p-Wert',
-        '__AIC__': 'AIC',
-        '__BIC__': 'BIC',
-        '__LogLik__': 'Log-Likelihood',
-        '__n_obs__': 'Anzahl Beobachtungen'
-    }, inplace=True)
+        df_model_metrics.loc[szenario] = {
+            "R² (Modellgüte)": round(model_ols.rsquared, 4),
+            "Adj. R²": round(model_ols.rsquared_adj, 4),
+            "F-Statistik": round(model_ols.fvalue, 4),
+            "F-Test p-Wert": round(model_ols.f_pvalue, 4),
+            "AIC": round(model_ols.aic, 4),
+            "BIC": round(model_ols.bic, 4),
+            "Log-Likelihood": round(model_ols.llf, 4),
+            "Anzahl Beobachtungen": int(model_ols.nobs)
+        }
 
     # Ausgabe der zusammengefassten Ergebnisse in der Konsole
     print("\nTabellarische Zusammenfassung der Ergebnisse:")
@@ -192,18 +188,9 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     export_path = os.path.join(output_dir, "regression_results.xlsx")
     with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
         df_results.to_excel(writer, sheet_name='Regressionsdetails')
-        # Optional: separate Tabelle mit nur den Modellmetriken
-        # === Separate Tabelle für Modellmetriken ===
-        df_model_metrics = df_results.loc[df_results.index.str.startswith("R²") |
-                                          df_results.index.str.startswith("Adj.") |
-                                          df_results.index.str.startswith("F-") |
-                                          df_results.index.str.startswith("AIC") |
-                                          df_results.index.str.startswith("BIC") |
-                                          df_results.index.str.startswith("Log-") |
-                                          df_results.index.str.startswith("Anzahl")]
 
         # Transponieren für bessere Lesbarkeit (jede Zeile = Szenario)
-        df_model_metrics = df_model_metrics.rename_axis("Metric").transpose()
+
         df_model_metrics.to_excel(writer, sheet_name='Modellmetriken')
 
     print(f"Gesamtergebnis-DataFrame wurde als Excel exportiert: {export_path}")
