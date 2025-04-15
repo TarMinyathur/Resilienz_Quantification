@@ -261,7 +261,7 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     # props = dict(boxstyle='round', facecolor='white', alpha=0.8, ec='black')
     # plt.gca().text(1.02, 0.95, box_text, transform=plt.gca().transAxes,
     #                verticalalignment='top', fontsize=9, bbox=props)
-    #
+
     plt.subplots_adjust(bottom=0.3)
 
     plot_path = os.path.join(output_dir, f"regression_less_indi_{szenario}.png")
