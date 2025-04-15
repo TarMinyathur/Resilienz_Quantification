@@ -66,9 +66,10 @@ def preprocess_data(df_indikatoren, df_szenarien):
 
 def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir):
     ergebnisse_szenarien = {}
+    excluded_by_scenario = {}  # neues Dict: Szenarioname → Liste (Spalte, VIF)
 
-    # DataFrame zur Sammlung der Regressionsergebnisse
-    df_results = pd.DataFrame(index=indikatoren_spalten)
+    # Leeres DataFrame, das später dynamisch wächst
+    df_results = pd.DataFrame()
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -85,6 +86,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
 
         print(f"\n=== Stepwise VIF-Check für Szenario '{szenario}' ===")
         X_n, excluded_info = remove_multicollinearity_vif(X, threshold=10.0)
+        excluded_by_scenario[szenario] = excluded_info
 
         # Falls nach VIF-Filter keine Spalten übrig sind, Szenario überspringen
         if X_n.shape[1] == 0:
@@ -143,13 +145,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         # --- 4) Series für t-Werte ---
         tvalues_series = model_ols.tvalues.drop('const', errors='ignore').round(4)
 
-        # Erst für alle gelöschten Variablen NaN setzen ...
-        for col in indikatoren_spalten:
-            if col not in X_n.columns:
-                df_results.loc[col, f'coeff_{szenario}'] = np.nan
-                df_results.loc[col, f'std_error_{szenario}'] = np.nan
-                df_results.loc[col, f'P>t_{szenario}'] = np.nan
-                df_results.loc[col, f'conf_int_{szenario}'] = np.nan
+        # Stelle sicher, dass alle Index-Zeilen vorhanden sind
+        df_results = df_results.reindex(index=df_results.index.union(params.index))
 
         # ... und dann die noch vorhandenen Variablen bestücken:
         df_results.loc[params.index, f'coeff_{szenario}'] = params_stars_series
@@ -185,13 +182,25 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     print(df_results.to_string())
 
     # Excel Export am Ende
-    export_path = os.path.join(output_dir, "regression_results.xlsx")
+    export_path = os.path.join(output_dir, "regression_results_min_less_indi.xlsx")
     with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
         df_results.to_excel(writer, sheet_name='Regressionsdetails')
 
         # Transponieren für bessere Lesbarkeit (jede Zeile = Szenario)
 
         df_model_metrics.to_excel(writer, sheet_name='Modellmetriken')
+
+        # === Neues Sheet: Ausgeschlossene Indikatoren ===
+        excluded_rows = []
+        for szenario, ex_list in excluded_by_scenario.items():
+            for col, vif in ex_list:
+                excluded_rows.append({
+                    "Indikator": col,
+                    "VIF-Wert": round(vif, 4)
+                })
+
+        df_excluded = pd.DataFrame(excluded_rows)
+        df_excluded.to_excel(writer, sheet_name='Ausgeschlossene Indikatoren', index=False)
 
     print(f"Gesamtergebnis-DataFrame wurde als Excel exportiert: {export_path}")
     return ergebnisse_szenarien
@@ -236,33 +245,33 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     plt.ylabel("Regression Coefficient")
 
     # Legende erstellen
-    positive_marker = Line2D([0], [0], marker='x', color='green', linestyle='None', markersize=10, label='Positive Koeffizienten')
-    negative_marker = Line2D([0], [0], marker='x', color='red', linestyle='None', markersize=10, label='Negative Koeffizienten')
-    significance_note = Line2D([0], [0], marker='None', color='none', label='* = signifikant (p < 0.05)')
+    positive_marker = Line2D([0], [0], marker='x', color='green', linestyle='None', markersize=10, label='Positive Coefficients')
+    negative_marker = Line2D([0], [0], marker='x', color='red', linestyle='None', markersize=10, label='Negative Coefficients')
+    significance_note = Line2D([0], [0], marker='None', color='none', label='* = significance (p < 0.05)')
     plt.legend(handles=[positive_marker, negative_marker, significance_note],
                loc='lower center', bbox_to_anchor=(0.5, -0.5), ncol=3, frameon=False)
 
-    # Platz für ausgeschlossene Variablen (VIF-Info)
-    if len(excluded_info) > 0:
-        box_text = "Excluded (VIF > 10):\n"
-        for col_name, vif_val in excluded_info:
-            box_text += f"  - {col_name}: VIF={vif_val:.2f}\n"
-    else:
-        box_text = "Keine Indikatoren ausgeschlossen (alle VIF <= 10)"
-    props = dict(boxstyle='round', facecolor='white', alpha=0.8, ec='black')
-    plt.gca().text(1.02, 0.95, box_text, transform=plt.gca().transAxes,
-                   verticalalignment='top', fontsize=9, bbox=props)
+    # # Platz für ausgeschlossene Variablen (VIF-Info)
+    # if len(excluded_info) > 0:
+    #     box_text = "Excluded (VIF > 10):\n"
+    #     for col_name, vif_val in excluded_info:
+    #         box_text += f"  - {col_name}: VIF={vif_val:.2f}\n"
+    # else:
+    #     box_text = "Keine Indikatoren ausgeschlossen (alle VIF <= 10)"
+    # props = dict(boxstyle='round', facecolor='white', alpha=0.8, ec='black')
+    # plt.gca().text(1.02, 0.95, box_text, transform=plt.gca().transAxes,
+    #                verticalalignment='top', fontsize=9, bbox=props)
+    #
+    plt.subplots_adjust(bottom=0.3)
 
-    plt.subplots_adjust(bottom=0.3, right=0.7)
-
-    plot_path = os.path.join(output_dir, f"regression_{szenario}.png")
+    plot_path = os.path.join(output_dir, f"regression_less_indi_{szenario}.png")
     plt.savefig(plot_path, dpi=400)
     plt.close()
     print(f"Plot für {szenario} gespeichert unter: {plot_path}")
 
 
 def save_summary(model_ols, szenario, output_dir):
-    with open(os.path.join(output_dir, f"regression_summary_{szenario}.txt"), "w") as f:
+    with open(os.path.join(output_dir, f"regression_summary_less_indi_{szenario}.txt"), "w") as f:
         f.write(model_ols.summary().as_text())
 
 
@@ -272,7 +281,7 @@ def save_summary(model_ols, szenario, output_dir):
 
 def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP.xlsx"
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_less_indi.xlsx"
 
     # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
