@@ -6,6 +6,7 @@ import os
 import numpy as np
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from matplotlib.lines import Line2D
+from scipy.stats import shapiro
 
 def remove_multicollinearity_vif(X, threshold=10.0):
     """
@@ -84,6 +85,17 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             print(f"Überspringe Regression für {szenario} (nur konstante Werte).")
             continue
 
+        # === Shapiro-Wilk-Test für Zielvariable (y) ===
+        y_clean = y.dropna()
+        if len(y_clean) >= 3:
+            stat_y, p_y = shapiro(y_clean)
+            print(f"\nShapiro-Wilk-Test für Zielvariable '{szenario}':")
+            print(f"  Teststatistik = {stat_y:.4f}, p-Wert = {p_y:.4f}")
+            if p_y < 0.05:
+                print("  ⚠️ Achtung: Die Zielvariable ist möglicherweise nicht normalverteilt.")
+        else:
+            print(f"Zu wenige Werte für Normalverteilungstest bei '{szenario}'.")
+
         print(f"\n=== Stepwise VIF-Check für Szenario '{szenario}' ===")
         X_n, excluded_info = remove_multicollinearity_vif(X, threshold=10.0)
         excluded_by_scenario[szenario] = excluded_info
@@ -96,6 +108,17 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         X_ols = sm.add_constant(X_n)
         model_ols = sm.OLS(y, X_ols).fit()
         ergebnisse_szenarien[szenario] = model_ols
+
+        # === Shapiro-Wilk-Test für Residuen ===
+        residuals = model_ols.resid.dropna()
+        if len(residuals) >= 3:
+            stat_r, p_r = shapiro(residuals)
+            print(f"\nShapiro-Wilk-Test für Residuen von '{szenario}':")
+            print(f"  Teststatistik = {stat_r:.4f}, p-Wert = {p_r:.4f}")
+            if p_r < 0.05:
+                print("  ⚠️ Achtung: Die Residuen sind möglicherweise nicht normalverteilt.")
+        else:
+            print("Zu wenige Residuen für Normalverteilungstest.")
 
         print("=" * 70)
         print(f"Regressionsergebnisse für Szenario: {szenario}")
@@ -181,6 +204,53 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     print("\nTabellarische Zusammenfassung der Ergebnisse:")
     print(df_results.to_string())
 
+    normaltest_rows = []
+
+    for szenario in ergebnisse_szenarien:
+        model = ergebnisse_szenarien[szenario]
+        y_vals = df_merged[szenario].dropna()
+        resid_vals = model.resid.dropna()
+
+        if len(y_vals) >= 3:
+            stat_y, p_y = shapiro(y_vals)
+            comment_y = "nicht normalverteilt" if p_y < 0.05 else "normalverteilt"
+            normaltest_rows.append({
+                "Szenario": szenario,
+                "Testtyp": "Zielvariable",
+                "Shapiro-Statistik": round(stat_y, 4),
+                "p-Wert": round(p_y, 4),
+                "Interpretation": comment_y
+            })
+        else:
+            normaltest_rows.append({
+                "Szenario": szenario,
+                "Testtyp": "Zielvariable",
+                "Shapiro-Statistik": None,
+                "p-Wert": None,
+                "Interpretation": "nicht geprüft (zu wenig Werte)"
+            })
+
+        if len(resid_vals) >= 3:
+            stat_r, p_r = shapiro(resid_vals)
+            comment_r = "nicht normalverteilt" if p_r < 0.05 else "normalverteilt"
+            normaltest_rows.append({
+                "Szenario": szenario,
+                "Testtyp": "Residuen",
+                "Shapiro-Statistik": round(stat_r, 4),
+                "p-Wert": round(p_r, 4),
+                "Interpretation": comment_r
+            })
+        else:
+            normaltest_rows.append({
+                "Szenario": szenario,
+                "Testtyp": "Residuen",
+                "Shapiro-Statistik": None,
+                "p-Wert": None,
+                "Interpretation": "nicht geprüft (zu wenig Werte)"
+            })
+
+    df_normaltests = pd.DataFrame(normaltest_rows)
+
     # Excel Export am Ende
     export_path = os.path.join(output_dir, "regression_results_min_less_indi.xlsx")
     with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
@@ -189,6 +259,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         # Transponieren für bessere Lesbarkeit (jede Zeile = Szenario)
 
         df_model_metrics.to_excel(writer, sheet_name='Modellmetriken')
+
+        df_normaltests.to_excel(writer, sheet_name='Normalverteilungstests', index=False)
 
         # === Neues Sheet: Ausgeschlossene Indikatoren ===
         excluded_rows = []
@@ -267,7 +339,21 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     plot_path = os.path.join(output_dir, f"regression_less_indi_{szenario}.png")
     plt.savefig(plot_path, dpi=400)
     plt.close()
+
     print(f"Plot für {szenario} gespeichert unter: {plot_path}")
+
+    # === Q-Q-Plot für Residuen ===
+    resid = model_ols.resid.dropna()
+    plt.figure(figsize=(6, 6))
+    sm.qqplot(resid, line='45', fit=True, markersize=4)
+    plt.title(f"Q-Q-Plot der Residuen – {szenario}")
+    plt.grid(True)
+    plt.tight_layout()
+    qq_path = os.path.join(output_dir, f"qqplot_resid_{szenario}.png")
+    plt.savefig(qq_path, dpi=300)
+
+    plt.close()
+    print(f"Q-Q-Plot gespeichert unter: {qq_path}")
 
 
 def save_summary(model_ols, szenario, output_dir):
@@ -281,7 +367,7 @@ def save_summary(model_ols, szenario, output_dir):
 
 def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_less_indi.xlsx"
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_less_Indi.xlsx"
 
     # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
