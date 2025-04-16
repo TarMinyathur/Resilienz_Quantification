@@ -11,7 +11,7 @@ import statsmodels.formula.api as smf
 
 
 
-def remove_multicollinearity_vif(X, threshold=10.0):
+def remove_multicollinearity_vif(X, threshold):
     """
     Entfernt iterativ Variablen mit hohem VIF, bis alle Variablen
     unter dem angegebenen 'threshold' liegen.
@@ -68,7 +68,7 @@ def preprocess_data(df_indikatoren, df_szenarien):
     return df_merged
 
 
-def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, regression_type="beta"):
+def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, threshold, regression_type):
     ergebnisse_szenarien = {}
     excluded_by_scenario = {}
     df_results = pd.DataFrame()
@@ -102,7 +102,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
 
         # === VIF-Check ===
         print(f"\n=== Stepwise VIF-Check für Szenario '{szenario}' ===")
-        X_n, excluded_info = remove_multicollinearity_vif(X, threshold=10.0)
+        X_n, excluded_info = remove_multicollinearity_vif(X, threshold)
         excluded_by_scenario[szenario] = excluded_info
 
         if X_n.shape[1] == 0:
@@ -127,8 +127,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         ergebnisse_szenarien[szenario] = model
 
         # Plots und Summary speichern
-        plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type)
-        save_summary(model, szenario, output_dir, regression_type)
+        plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type, threshold)
+        save_summary(model, szenario, output_dir, regression_type,threshold)
 
         # === Shapiro-Wilk-Test für Residuen ===
         # === Residuen für OLS prüfen ===
@@ -139,10 +139,10 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
                 print(f"Shapiro-Test für Residuen von '{szenario}': stat = {stat_r:.4f}, p = {p_r:.4f}")
 
         indikatoren = [col for col in indikatoren_spalten if col in model.params.index]
-        params = model.params[indikatoren]
-        std_errors = model.bse[indikatoren]
-        pvalues = model.pvalues[indikatoren]
-        conf_int = model.conf_int()[indikatoren]
+        params = model.params.loc[indikatoren]
+        std_errors = model.bse.loc[indikatoren]
+        pvalues = model.pvalues.loc[indikatoren]
+        conf_int = model.conf_int().loc[indikatoren]
 
         params_stars_series = pd.Series(index=params.index, dtype="object")
         for idx in params.index:
@@ -276,7 +276,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     df_normaltests = pd.DataFrame(normaltest_rows)
 
     # Excel Export am Ende
-    export_path = os.path.join(output_dir, "regression_results_min_less_indi.xlsx")
+    export_path = os.path.join(output_dir, f"regression_results_min_less_indi{regression_type}{threshold}.xlsx")
     with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
         df_results.to_excel(writer, sheet_name='Regressionsdetails')
 
@@ -302,7 +302,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     return ergebnisse_szenarien
 
 
-def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type):
+def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type, threshold):
 
     # Formatierter Regressionstyp für Beschriftungen
     reg_label = "Linear Regression" if regression_type == "ols" else "Beta-Regression"
@@ -355,7 +355,7 @@ def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_
 
     plt.subplots_adjust(bottom=0.3)
 
-    plot_path = os.path.join(output_dir, f"regression_less_indi_{reg_suffix}_{szenario}.png")
+    plot_path = os.path.join(output_dir, f"regression_less_indi_{reg_suffix}_{szenario}_{threshold}.png")
     plt.savefig(plot_path, dpi=400)
     plt.close()
 
@@ -380,8 +380,8 @@ def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_
         print(f"Keine Residuen verfügbar für Q-Q-Plot bei {szenario} ({reg_label})")
 
 
-def save_summary(models, szenario, output_dir,regression_type):
-    with open(os.path.join(output_dir, f"regression_summary_less_indi_{szenario}{regression_type}.txt"), "w") as f:
+def save_summary(models, szenario, output_dir,regression_type,threshold):
+    with open(os.path.join(output_dir, f"regression_summary_less_indi_{szenario}{regression_type}{threshold}.txt"), "w") as f:
         f.write(models.summary().as_text())
 
 
@@ -405,7 +405,7 @@ def main():
     indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]
     szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
 
-    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir)
+    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir,threshold=20, regression_type="ols")
 
 
 if __name__ == "__main__":
