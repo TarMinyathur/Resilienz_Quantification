@@ -7,6 +7,9 @@ import numpy as np
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from matplotlib.lines import Line2D
 from scipy.stats import shapiro
+import statsmodels.formula.api as smf
+
+
 
 def remove_multicollinearity_vif(X, threshold=10.0):
     """
@@ -65,25 +68,26 @@ def preprocess_data(df_indikatoren, df_szenarien):
     return df_merged
 
 
-def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir):
+def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, regression_type="beta"):
     ergebnisse_szenarien = {}
-    excluded_by_scenario = {}  # neues Dict: Szenarioname → Liste (Spalte, VIF)
-
-    # Leeres DataFrame, das später dynamisch wächst
+    excluded_by_scenario = {}
     df_results = pd.DataFrame()
-
     os.makedirs(output_dir, exist_ok=True)
+    normaltest_rows = []
 
     for szenario in szenarien_spalten:
-        X = df_merged[indikatoren_spalten]
-        y = df_merged[szenario]
+        X = df_merged[indikatoren_spalten].copy()
+        y = df_merged[szenario].copy()
 
-        if y.isnull().all():
-            print(f"Überspringe Regression für {szenario} (nur NaN-Werte).")
+        if y.isnull().all() or y.nunique() == 1:
+            print(f"Überspringe Regression für {szenario} (nur NaN oder konstante Werte).")
             continue
-        if y.nunique() == 1:
-            print(f"Überspringe Regression für {szenario} (nur konstante Werte).")
-            continue
+
+        # === Transformiere y für Beta-Regression ===
+        if regression_type == "beta":
+            eps = 1e-6
+            y = (y * (len(y) - 1) + 0.5) / len(y)  # Transformation in (0,1)
+            y = y.clip(eps, 1 - eps)  # Falls nach Rundung noch 0/1 entstehen
 
         # === Shapiro-Wilk-Test für Zielvariable (y) ===
         y_clean = y.dropna()
@@ -96,45 +100,54 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         else:
             print(f"Zu wenige Werte für Normalverteilungstest bei '{szenario}'.")
 
+        # === VIF-Check ===
         print(f"\n=== Stepwise VIF-Check für Szenario '{szenario}' ===")
         X_n, excluded_info = remove_multicollinearity_vif(X, threshold=10.0)
         excluded_by_scenario[szenario] = excluded_info
 
-        # Falls nach VIF-Filter keine Spalten übrig sind, Szenario überspringen
         if X_n.shape[1] == 0:
-            print(f"Keine Indikatoren mehr übrig nach VIF-Filter. Szenario '{szenario}' wird übersprungen.")
+            print(f"Keine Indikatoren nach VIF-Filter übrig: {szenario}")
             continue
 
-        X_ols = sm.add_constant(X_n)
-        model_ols = sm.OLS(y, X_ols).fit()
-        ergebnisse_szenarien[szenario] = model_ols
+        # === Regressionsmodell je nach Typ ===
+        if regression_type == "ols":
+            X_ols = sm.add_constant(X_n)
+            model = sm.OLS(y, X_ols).fit()
+        elif regression_type == "beta":
+            # Formel für GLM mit logit-Link
+            data = X_n.copy()
+            data['y'] = y
+            data = data.rename(columns=lambda x: x.replace(" ", "_").replace("-", "_"))
+            formula = 'y ~ ' + ' + '.join(col for col in data.columns if col != 'y')
+            model = smf.glm(formula=formula, data=data,
+                            family=sm.families.Binomial(link=sm.families.links.Logit())).fit()
+        else:
+            raise ValueError("Ungültiger Regressions-Typ. Bitte 'ols' oder 'beta' angeben.")
+
+        ergebnisse_szenarien[szenario] = model
+
+        # Plots und Summary speichern
+        plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type)
+        save_summary(model, szenario, output_dir, regression_type)
 
         # === Shapiro-Wilk-Test für Residuen ===
-        residuals = model_ols.resid.dropna()
-        if len(residuals) >= 3:
-            stat_r, p_r = shapiro(residuals)
-            print(f"\nShapiro-Wilk-Test für Residuen von '{szenario}':")
-            print(f"  Teststatistik = {stat_r:.4f}, p-Wert = {p_r:.4f}")
-            if p_r < 0.05:
-                print("  ⚠️ Achtung: Die Residuen sind möglicherweise nicht normalverteilt.")
-        else:
-            print("Zu wenige Residuen für Normalverteilungstest.")
+        # === Residuen für OLS prüfen ===
+        if regression_type == "ols":
+            residuals = model.resid.dropna()
+            if len(residuals) >= 3:
+                stat_r, p_r = shapiro(residuals)
+                print(f"Shapiro-Test für Residuen von '{szenario}': stat = {stat_r:.4f}, p = {p_r:.4f}")
 
-        print("=" * 70)
-        print(f"Regressionsergebnisse für Szenario: {szenario}")
-        print(model_ols.summary())
+        indikatoren = [col for col in indikatoren_spalten if col in model.params.index]
+        params = model.params[indikatoren]
+        std_errors = model.bse[indikatoren]
+        pvalues = model.pvalues[indikatoren]
+        conf_int = model.conf_int()[indikatoren]
 
-        # Ergebnisse extrahieren (ohne 'const')
-        params = model_ols.params.drop('const', errors='ignore')
-        std_errors = model_ols.bse.drop('const', errors='ignore')
-        pvalues = model_ols.pvalues.drop('const', errors='ignore')
-        conf_int = model_ols.conf_int().drop('const', errors='ignore')
-
-        # --- 1) Series für Koeffizienten mit Sternchen ---
         params_stars_series = pd.Series(index=params.index, dtype="object")
         for idx in params.index:
-            param_val = params.loc[idx]
             p_val = pvalues.loc[idx]
+            param_val = params.loc[idx]
             if p_val < 0.001:
                 star = "***"
             elif p_val < 0.01:
@@ -159,58 +172,66 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
                 star = ""
             pvalues_stars_series[idx] = f"{p_val:.4f}{star}"
 
-        # --- 3) Series für Konfidenzintervalle (als String) ---
-        conf_str_series = pd.Series(index=conf_int.index, dtype="object")
-        for idx in conf_int.index:
-            ci_low, ci_high = conf_int.loc[idx]
-            conf_str_series[idx] = f"[{ci_low:.3f}, {ci_high:.3f}]"
-
-        # --- 4) Series für t-Werte ---
-        tvalues_series = model_ols.tvalues.drop('const', errors='ignore').round(4)
-
-        # Stelle sicher, dass alle Index-Zeilen vorhanden sind
+        # Stelle sicher, dass alle Regressor-Namen im Index von df_results vorhanden sind
         df_results = df_results.reindex(index=df_results.index.union(params.index))
 
-        # ... und dann die noch vorhandenen Variablen bestücken:
+        # Schreibe Parameterwerte und Standardfehler
         df_results.loc[params.index, f'coeff_{szenario}'] = params_stars_series
         df_results.loc[std_errors.index, f'std_error_{szenario}'] = std_errors.round(4)
-        df_results.loc[tvalues_series.index, f't_value_{szenario}'] = tvalues_series
-        df_results.loc[pvalues.index, f'P>t_{szenario}'] = pvalues_stars_series
-        df_results.loc[conf_int.index, f'conf_int_{szenario}'] = conf_str_series
 
-        # Plots und Summary speichern
-        plot_regression(model_ols, szenario, X_n.columns, output_dir, excluded_info)
-        save_summary(model_ols, szenario, output_dir)
+        # Statistische Testwerte (t oder z) – je nach Regressions-Typ
+        if regression_type == "ols":
+            test_stats = model.tvalues.drop(labels=['const', 'Intercept'], errors='ignore').round(4)
+            df_results.loc[test_stats.index, f't_value_{szenario}'] = test_stats
+        else:
+            test_stats = (params / std_errors).round(4)  # z-Werte bei GLM
+            df_results.loc[test_stats.index, f'Z_value_{szenario}'] = test_stats
 
-        # === Modellmetriken in separatem DataFrame sammeln ===
+        # P-Werte
+        df_results.loc[pvalues.index, f'P>t_{szenario}'] = pvalues.round(4)
+
+        # Konfidenzintervall als formatierter String vorbereiten
+        conf_colname = f'conf_int_{szenario}'
+        conf_formatted = conf_int.loc[params.index].apply(
+            lambda x: f"[{x[0]:.3f}, {x[1]:.3f}]", axis=1
+        )
+
+        # Sicherheitshalber vorbereiten (nicht zwingend, aber sauber)
+        if conf_colname not in df_results.columns:
+            df_results[conf_colname] = np.nan
+
+        # Zuweisung der Konfidenzintervalle
+        df_results.loc[params.index, conf_colname] = conf_formatted
+
         if 'df_model_metrics' not in locals():
             df_model_metrics = pd.DataFrame(columns=[
-                "R² (Modellgüte)", "Adj. R²", "F-Statistik", "F-Test p-Wert",
-                "AIC", "BIC", "Log-Likelihood", "Anzahl Beobachtungen"
+                "R² (Modellgüte)", "Adj. R²", "AIC", "BIC", "Log-Likelihood", "Anzahl Beobachtungen"
             ])
 
+        if regression_type == "ols":
+            r_squared = round(model.rsquared, 4)
+            adj_r_squared = round(model.rsquared_adj, 4)
+        else:
+            r_squared = adj_r_squared = np.nan
+
         df_model_metrics.loc[szenario] = {
-            "R² (Modellgüte)": round(model_ols.rsquared, 4),
-            "Adj. R²": round(model_ols.rsquared_adj, 4),
-            "F-Statistik": round(model_ols.fvalue, 4),
-            "F-Test p-Wert": round(model_ols.f_pvalue, 4),
-            "AIC": round(model_ols.aic, 4),
-            "BIC": round(model_ols.bic, 4),
-            "Log-Likelihood": round(model_ols.llf, 4),
-            "Anzahl Beobachtungen": int(model_ols.nobs)
+            "R² (Modellgüte)": r_squared,
+            "Adj. R²": adj_r_squared,
+            "AIC": round(model.aic, 4),
+            "BIC": round(model.bic, 4),
+            "Log-Likelihood": round(model.llf, 4),
+            "Anzahl Beobachtungen": int(model.nobs)
         }
 
-    # Ausgabe der zusammengefassten Ergebnisse in der Konsole
-    print("\nTabellarische Zusammenfassung der Ergebnisse:")
-    print(df_results.to_string())
 
+    # === Shapiro-Wilk-Tests für Zielvariable & Residuen (nach der Regression) ===
     normaltest_rows = []
 
     for szenario in ergebnisse_szenarien:
         model = ergebnisse_szenarien[szenario]
         y_vals = df_merged[szenario].dropna()
-        resid_vals = model.resid.dropna()
 
+        # Zielvariable testen
         if len(y_vals) >= 3:
             stat_y, p_y = shapiro(y_vals)
             comment_y = "nicht normalverteilt" if p_y < 0.05 else "normalverteilt"
@@ -230,23 +251,26 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
                 "Interpretation": "nicht geprüft (zu wenig Werte)"
             })
 
-        if len(resid_vals) >= 3:
-            stat_r, p_r = shapiro(resid_vals)
-            comment_r = "nicht normalverteilt" if p_r < 0.05 else "normalverteilt"
+        # Nur bei OLS: Residuen testen
+        if regression_type == "ols":
+            try:
+                resid_vals = model.resid.dropna()
+                if len(resid_vals) >= 3:
+                    stat_r, p_r = shapiro(resid_vals)
+                    comment_r = "nicht normalverteilt" if p_r < 0.05 else "normalverteilt"
+                else:
+                    stat_r, p_r = None, None
+                    comment_r = "nicht geprüft (zu wenig Werte)"
+            except AttributeError:
+                stat_r, p_r = None, None
+                comment_r = "nicht getestet (nicht verfügbar für dieses Modell)"
+
             normaltest_rows.append({
                 "Szenario": szenario,
                 "Testtyp": "Residuen",
-                "Shapiro-Statistik": round(stat_r, 4),
-                "p-Wert": round(p_r, 4),
+                "Shapiro-Statistik": stat_r if stat_r is None else round(stat_r, 4),
+                "p-Wert": p_r if p_r is None else round(p_r, 4),
                 "Interpretation": comment_r
-            })
-        else:
-            normaltest_rows.append({
-                "Szenario": szenario,
-                "Testtyp": "Residuen",
-                "Shapiro-Statistik": None,
-                "p-Wert": None,
-                "Interpretation": "nicht geprüft (zu wenig Werte)"
             })
 
     df_normaltests = pd.DataFrame(normaltest_rows)
@@ -278,15 +302,21 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     return ergebnisse_szenarien
 
 
-def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, excluded_info):
-    params_score = model_ols.params
-    conf_score = model_ols.conf_int()
-    p_values = model_ols.pvalues
+def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type):
+
+    # Formatierter Regressionstyp für Beschriftungen
+    reg_label = "Linear Regression" if regression_type == "ols" else "Beta-Regression"
+    reg_suffix = regression_type.lower()
+
+    params_score = models.params
+    conf_score = models.conf_int()
+    p_values = models.pvalues
 
     # Entferne den Intercept (const)
-    params_score_no_intercept = params_score.drop('const')
-    conf_score_no_intercept = conf_score.drop('const')
-    p_values_no_intercept = p_values.drop('const')
+    indikator_namen = [col for col in params_score.index if col.lower() not in ['const', 'intercept']]
+    params_score_no_intercept = params_score[indikator_namen]
+    conf_score_no_intercept = conf_score.loc[indikator_namen]
+    p_values_no_intercept = p_values[indikator_namen]
 
     ind_names = params_score_no_intercept.index
     coef_vals = params_score_no_intercept.values
@@ -311,7 +341,7 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     plt.xticks(x_pos, ind_labels, rotation=45, ha="right")
     plt.axhline(y=0, color='grey', linewidth=0.5, linestyle="-")  # Horizontale Linie bei y=0 als Referenz
 
-    plt.title(f"Regression Coefficients and 95% Confidence Intervals: {szenario}")
+    plt.title(f"{reg_label}: Coefficients and 95% Confidence Intervals: – {szenario}")
     plt.xlabel("Indicators", labelpad=10)
     plt.gca().xaxis.set_label_coords(0.5, 0.05)
     plt.ylabel("Regression Coefficient")
@@ -323,42 +353,36 @@ def plot_regression(model_ols, szenario, indikatoren_spalten, output_dir, exclud
     plt.legend(handles=[positive_marker, negative_marker, significance_note],
                loc='lower center', bbox_to_anchor=(0.5, -0.5), ncol=3, frameon=False)
 
-    # # Platz für ausgeschlossene Variablen (VIF-Info)
-    # if len(excluded_info) > 0:
-    #     box_text = "Excluded (VIF > 10):\n"
-    #     for col_name, vif_val in excluded_info:
-    #         box_text += f"  - {col_name}: VIF={vif_val:.2f}\n"
-    # else:
-    #     box_text = "Keine Indikatoren ausgeschlossen (alle VIF <= 10)"
-    # props = dict(boxstyle='round', facecolor='white', alpha=0.8, ec='black')
-    # plt.gca().text(1.02, 0.95, box_text, transform=plt.gca().transAxes,
-    #                verticalalignment='top', fontsize=9, bbox=props)
-
     plt.subplots_adjust(bottom=0.3)
 
-    plot_path = os.path.join(output_dir, f"regression_less_indi_{szenario}.png")
+    plot_path = os.path.join(output_dir, f"regression_less_indi_{reg_suffix}_{szenario}.png")
     plt.savefig(plot_path, dpi=400)
     plt.close()
 
     print(f"Plot für {szenario} gespeichert unter: {plot_path}")
 
-    # === Q-Q-Plot für Residuen ===
-    resid = model_ols.resid.dropna()
-    plt.figure(figsize=(6, 6))
-    sm.qqplot(resid, line='45', fit=True, markersize=4)
-    plt.title(f"Q-Q-Plot der Residuen – {szenario}")
-    plt.grid(True)
-    plt.tight_layout()
-    qq_path = os.path.join(output_dir, f"qqplot_resid_{szenario}.png")
-    plt.savefig(qq_path, dpi=300)
 
-    plt.close()
-    print(f"Q-Q-Plot gespeichert unter: {qq_path}")
+    # === Q-Q-Plot für Residuen (nur wenn vorhanden) ===
+    try:
+        resid = models.resid.dropna()
+        plt.figure(figsize=(6, 6))
+        sm.qqplot(resid, line='45', fit=True, markersize=4)
+        plt.title(f"Q-Q-Plot der Residuen – {szenario}")
+        plt.grid(True)
+        plt.tight_layout()
+        qq_path = os.path.join(output_dir, f"qqplot_resid_{szenario}.png")
+        plt.savefig(qq_path, dpi=300)
+
+        plt.close()
+        print(f"Q-Q-Plot gespeichert unter: {qq_path}")
+
+    except AttributeError:
+        print(f"Keine Residuen verfügbar für Q-Q-Plot bei {szenario} ({reg_label})")
 
 
-def save_summary(model_ols, szenario, output_dir):
-    with open(os.path.join(output_dir, f"regression_summary_less_indi_{szenario}.txt"), "w") as f:
-        f.write(model_ols.summary().as_text())
+def save_summary(models, szenario, output_dir,regression_type):
+    with open(os.path.join(output_dir, f"regression_summary_less_indi_{szenario}{regression_type}.txt"), "w") as f:
+        f.write(models.summary().as_text())
 
 
 # --------------------------
