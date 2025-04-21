@@ -13,43 +13,36 @@ from itertools import islice
 
 # Idee: Redundanz über senken von max external messen?
 # generell: max ext grid = Summe Erzeugung?
-def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout, max_calls=250):
+def n_3_redundancy_check(net_temp_red, start_time, element_type, timeout, max_calls=150):
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type: {element_type}")
 
     results = {element_type: {"Success": 0, "Failed": 0}}
 
-    # If the table for this element type is empty or has fewer than 3 rows, no combinations can be made
-    if net_temp_red[element_type].empty or len(net_temp_red[element_type].index) < 3:
+    element_table = net_temp_red[element_type]
+    if element_table.empty or len(element_table.index) < 3:
         return results
 
-    # Extract indices and shuffle them to achieve a pseudo-random iteration of combinations
-    index_list = list(net_temp_red[element_type].index)
+    # Indices vorbereiten und zufällig mischen
+    index_list = list(element_table.index)
     random.shuffle(index_list)
 
-    # Create a combinations generator instead of a full list
-    element_triples_gen = itertools.combinations(index_list, 3)
+    # Kombinationen von 3 zufälligen Elementen vorbereiten (max. max_calls)
+    element_triples = list(itertools.islice(itertools.combinations(index_list, 3), max_calls))
 
-    should_stop = False
-
-    # Process the selected element type in parallel
     with ProcessPoolExecutor(max_workers=3) as executor:
         futures = []
 
-        for triple in islice(element_triples_gen, max_calls):
-            if should_stop:
+        for triple in element_triples:
+            # Timeout prüfen vor jedem Submit
+            if (time.time() - start_time) > timeout:
+                print("Timeout reached. Ending process.")
                 break
 
             net_temp_red_copy = net_temp_red.deepcopy()
             futures.append(executor.submit(process_triple, element_type, triple, net_temp_red_copy))
 
-            # Check timeout after each task submission
-            if (time.time() - start_time) > timeout:
-                print("Timeout reached. Ending process.")
-                should_stop = True
-                break
-
-        # Collect results
+        # Ergebnisse sammeln
         for future in futures:
             element_type_returned, status = future.result()
             results[element_type_returned][status] += 1

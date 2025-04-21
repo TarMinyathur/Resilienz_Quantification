@@ -3,15 +3,6 @@
 
 import pandapower as pp
 import pandas as pd
-# def set_power_limits(df):
-#     """
-#     Vectorized function to set power limits for gen, sgen, and storage.
-#     """
-#
-#     # Ensure required columns exist, initializing with NaN if missing
-#     for col in ['max_p_mw', 'min_p_mw', 'max_q_mvar', 'min_q_mvar']:
-#         if col not in df.columns:
-#             df[col] = pd.NA  # Initialize with NaN
 
 def set_missing_limits(net):
     # Process conventional generators (gen)
@@ -78,18 +69,49 @@ def set_missing_limits(net):
         if storage['max_e_mwh'] == float('inf'):
             net.storage.at[idx, 'max_e_mwh'] = storage['p_mw'] * 24
 
-    for idx, ext_grid in net.ext_grid.iterrows():
-        # Falls max_p_mw oder min_p_mw nicht gesetzt sind, setzen
-        if pd.isna(ext_grid.get('max_p_mw')):
-            net.ext_grid.at[idx, 'max_p_mw'] = 1000000
-        if pd.isna(ext_grid.get('min_p_mw')):
-            net.ext_grid.at[idx, 'min_p_mw'] = -200000  # Sicherheitsfaktor
+    # for idx, ext_grid in net.ext_grid.iterrows():
+    #     # Falls max_p_mw oder min_p_mw nicht gesetzt sind, setzen
+    #     if pd.isna(ext_grid.get('max_p_mw')):
+    #         net.ext_grid.at[idx, 'max_p_mw'] = 1000000
+    #     if pd.isna(ext_grid.get('min_p_mw')):
+    #         net.ext_grid.at[idx, 'min_p_mw'] = -200000  # Sicherheitsfaktor
+    #
+    #     # Falls max_q_mvar oder min_q_mvar nicht gesetzt sind, setzen
+    #     if pd.isna(ext_grid.get('max_q_mvar')):
+    #         net.ext_grid.at[idx, 'max_q_mvar'] = 1000000  # Begrenzte Q-Abgabe (+50%)
+    #     if pd.isna(ext_grid.get('min_q_mvar')):
+    #         net.ext_grid.at[idx, 'min_q_mvar'] = -200000  # Größerer Q-Bezug (-80%)
 
-        # Falls max_q_mvar oder min_q_mvar nicht gesetzt sind, setzen
+    # Durchlaufe alle externen Netze (es kann mehrere geben)
+    for idx, ext_grid in net.ext_grid.iterrows():
+        bus_idx = ext_grid['bus']  # Bus, an dem das externe Netz angeschlossen ist
+        vn_kv = net.bus.at[bus_idx, 'vn_kv']  # Spannungslevel des Busses
+
+        # Basierend auf Spannungsebene typische Transformator-Nennleistung S_max setzen
+        if vn_kv <= 20:
+            S_max = 50  # Mittelspannungstrafos liegen meist zwischen 25-63 MVA
+            P_factor, Q_factor = 0.9, 0.4
+        elif vn_kv <= 110:
+            S_max = 200  # Hochspannungstrafos liegen meist zwischen 100-300 MVA
+            P_factor, Q_factor = 0.95, 0.5
+        elif vn_kv <= 220:
+            S_max = 500  # Höchstspannungstrafos liegen meist zwischen 300-800 MVA
+            P_factor, Q_factor = 0.97, 0.6
+        else:  # ≥ 380 kV
+             S_max = 1500  # Höchstspannungsbereich (800-3000 MVA möglich)
+             P_factor, Q_factor = 1.0, 0.7
+
+    # Falls max_p_mw oder min_p_mw nicht gesetzt sind, setzen
+        if pd.isna(ext_grid.get('max_p_mw')):
+            net.ext_grid.at[idx, 'max_p_mw'] = S_max * P_factor
+        if pd.isna(ext_grid.get('min_p_mw')):
+            net.ext_grid.at[idx, 'min_p_mw'] = - (S_max * 0.5)  # Sicherheitsfaktor
+
+    # Falls max_q_mvar oder min_q_mvar nicht gesetzt sind, setzen
         if pd.isna(ext_grid.get('max_q_mvar')):
-            net.ext_grid.at[idx, 'max_q_mvar'] = 1000000  # Begrenzte Q-Abgabe (+50%)
+            net.ext_grid.at[idx, 'max_q_mvar'] = S_max * Q_factor * 0.5  # Begrenzte Q-Abgabe (+50%)
         if pd.isna(ext_grid.get('min_q_mvar')):
-            net.ext_grid.at[idx, 'min_q_mvar'] = -200000  # Größerer Q-Bezug (-80%)
+            net.ext_grid.at[idx, 'min_q_mvar'] = - (S_max * Q_factor * 0.8)  # Größerer Q-Bezug (-80%)
 
         # 🔹 Remove All Existing Cost Functions to Avoid Duplicates
     if not net.poly_cost.empty:
@@ -154,102 +176,102 @@ def set_power_limits(df, multiplier=1.4):
     # Set Reactive Power Limits (Q)
     df['max_q_mvar'] = df['max_q_mvar'].fillna(df['p_mw'])
     df['min_q_mvar'] = df['min_q_mvar'].fillna(-df['p_mw'])
-
-def initialize_and_set_bus_voltage_limits(net, min_vm_pu=0.7, max_vm_pu=1.3):
-    """
-    Ensures 'min_vm_pu' and 'max_vm_pu' columns exist and sets default voltage limits.
-    This avoids KeyError and handles future Pandas changes gracefully.
-    """
-    # Check and initialize if columns don't exist
-    if 'min_vm_pu' not in net.bus.columns:
-        net.bus['min_vm_pu'] = pd.NA
-    if 'max_vm_pu' not in net.bus.columns:
-        net.bus['max_vm_pu'] = pd.NA
-
-    # Safely fill NaN values with defaults
-    net.bus['min_vm_pu'] = net.bus['min_vm_pu'].fillna(min_vm_pu).astype(float)
-    net.bus['max_vm_pu'] = net.bus['max_vm_pu'].fillna(max_vm_pu).astype(float)
-
-def determine_minimum_ext_grid_power(net):
-    """
-    Runs OPF to determine the required minimum external grid power (max_p_mw).
-    Then updates ext_grid max_p_mw based on the result.
-    """
-
-    # Define Constants
-    DEFAULT_MAX_P_MW = 10000000
-    DEFAULT_MIN_P_MW = -2000000
-    DEFAULT_MAX_Q_MVAR = 10000000
-    DEFAULT_MIN_Q_MVAR = -2000000
-
-    # Apply the power limits to each component using vectorized operations
-    set_power_limits(net.gen)
-    set_power_limits(net.sgen)
-    set_power_limits(net.storage)
-
-    # Set bus voltage limits
-    initialize_and_set_bus_voltage_limits(net)
-
-    # External Grid Settings
-    for idx, ext_grid in net.ext_grid.iterrows():
-        net.ext_grid.loc[idx, 'max_p_mw'] = ext_grid.get('max_p_mw', DEFAULT_MAX_P_MW)
-        net.ext_grid.loc[idx, 'min_p_mw'] = ext_grid.get('min_p_mw', DEFAULT_MIN_P_MW)
-        net.ext_grid.loc[idx, 'max_q_mvar'] = ext_grid.get('max_q_mvar', DEFAULT_MAX_Q_MVAR)
-        net.ext_grid.loc[idx, 'min_q_mvar'] = ext_grid.get('min_q_mvar', DEFAULT_MIN_Q_MVAR)
-        net.ext_grid.loc[idx, "slack"] = True  # Set as slack bus
-
-    # Ensure all elements have cost functions
-    if "poly_cost" not in net or net.poly_cost.empty:
-        net["poly_cost"] = pd.DataFrame(columns=["element", "et", "cp1_eur_per_mw"])
-
-    add_cost_function_if_missing(net, "gen")
-    add_cost_function_if_missing(net, "sgen")
-    add_cost_function_if_missing(net, "storage")
-    add_cost_function_if_missing(net, "ext_grid")
-
-    # Run Power Flow first
-    pp.runpp(net)
-    # Run Optimal Power Flow (OPF)
-    try:
-        pp.runopp(
-            net,
-            init="pf",
-            calculate_voltage_angles=True,
-            enforce_q_lims=True,
-            distributed_slack=True,
-            dipm_step_size=0.05
-        )
-        print("OPF Converged Successfully!")
-
-    except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
-        print("OPF did not converge with init='pf'. Retrying with init='flat'")
-        try:
-            # Retry with init="flat"
-            pp.runopp(
-                net,
-                init="flat",
-                calculate_voltage_angles=True,
-                enforce_q_lims=True,
-                distributed_slack=True,
-                verbose=True
-            )
-            print("OPF Converged with init='flat'")
-        except pp.optimal_powerflow.OPFNotConverged:
-
-            raise ValueError("OPF did not converge with any initialization method.")
-
-
-    # Calculate required external grid power
-    required_p_mw = net.res_ext_grid["p_mw"].sum() * 1.1
-    required_q_mvar = net.res_ext_grid["q_mvar"].sum() * 1.1
-
-    # **Corrected Assignment**
-    net.ext_grid["max_p_mw"] = required_p_mw
-    net.ext_grid["max_q_mvar"] = required_q_mvar
-
-    return net, required_p_mw, required_q_mvar
-
-
+#
+# def initialize_and_set_bus_voltage_limits(net, min_vm_pu=0.7, max_vm_pu=1.3):
+#     """
+#     Ensures 'min_vm_pu' and 'max_vm_pu' columns exist and sets default voltage limits.
+#     This avoids KeyError and handles future Pandas changes gracefully.
+#     """
+#     # Check and initialize if columns don't exist
+#     if 'min_vm_pu' not in net.bus.columns:
+#         net.bus['min_vm_pu'] = pd.NA
+#     if 'max_vm_pu' not in net.bus.columns:
+#         net.bus['max_vm_pu'] = pd.NA
+#
+#     # Safely fill NaN values with defaults
+#     net.bus['min_vm_pu'] = net.bus['min_vm_pu'].fillna(min_vm_pu).astype(float)
+#     net.bus['max_vm_pu'] = net.bus['max_vm_pu'].fillna(max_vm_pu).astype(float)
+#
+# def determine_minimum_ext_grid_power(net):
+#     """
+#     Runs OPF to determine the required minimum external grid power (max_p_mw).
+#     Then updates ext_grid max_p_mw based on the result.
+#     """
+#
+#     # Define Constants
+#     DEFAULT_MAX_P_MW = 10000000
+#     DEFAULT_MIN_P_MW = -2000000
+#     DEFAULT_MAX_Q_MVAR = 10000000
+#     DEFAULT_MIN_Q_MVAR = -2000000
+#
+#     # Apply the power limits to each component using vectorized operations
+#     set_power_limits(net.gen)
+#     set_power_limits(net.sgen)
+#     set_power_limits(net.storage)
+#
+#     # Set bus voltage limits
+#     initialize_and_set_bus_voltage_limits(net)
+#
+#     # External Grid Settings
+#     for idx, ext_grid in net.ext_grid.iterrows():
+#         net.ext_grid.loc[idx, 'max_p_mw'] = ext_grid.get('max_p_mw', DEFAULT_MAX_P_MW)
+#         net.ext_grid.loc[idx, 'min_p_mw'] = ext_grid.get('min_p_mw', DEFAULT_MIN_P_MW)
+#         net.ext_grid.loc[idx, 'max_q_mvar'] = ext_grid.get('max_q_mvar', DEFAULT_MAX_Q_MVAR)
+#         net.ext_grid.loc[idx, 'min_q_mvar'] = ext_grid.get('min_q_mvar', DEFAULT_MIN_Q_MVAR)
+#         net.ext_grid.loc[idx, "slack"] = True  # Set as slack bus
+#
+#     # Ensure all elements have cost functions
+#     if "poly_cost" not in net or net.poly_cost.empty:
+#         net["poly_cost"] = pd.DataFrame(columns=["element", "et", "cp1_eur_per_mw"])
+#
+#     add_cost_function_if_missing(net, "gen")
+#     add_cost_function_if_missing(net, "sgen")
+#     add_cost_function_if_missing(net, "storage")
+#     add_cost_function_if_missing(net, "ext_grid")
+#
+#     # Run Power Flow first
+#     pp.runpp(net)
+#     # Run Optimal Power Flow (OPF)
+#     try:
+#         pp.runopp(
+#             net,
+#             init="pf",
+#             calculate_voltage_angles=True,
+#             enforce_q_lims=True,
+#             distributed_slack=True,
+#             dipm_step_size=0.05
+#         )
+#         print("OPF Converged Successfully!")
+#
+#     except (pp.optimal_powerflow.OPFNotConverged, pp.powerflow.LoadflowNotConverged):
+#         print("OPF did not converge with init='pf'. Retrying with init='flat'")
+#         try:
+#             # Retry with init="flat"
+#             pp.runopp(
+#                 net,
+#                 init="flat",
+#                 calculate_voltage_angles=True,
+#                 enforce_q_lims=True,
+#                 distributed_slack=True,
+#                 verbose=True
+#             )
+#             print("OPF Converged with init='flat'")
+#         except pp.optimal_powerflow.OPFNotConverged:
+#
+#             raise ValueError("OPF did not converge with any initialization method.")
+#
+#
+#     # Calculate required external grid power
+#     required_p_mw = net.res_ext_grid["p_mw"].sum() * 1.1
+#     required_q_mvar = net.res_ext_grid["q_mvar"].sum() * 1.1
+#
+#     # **Corrected Assignment**
+#     net.ext_grid["max_p_mw"] = required_p_mw
+#     net.ext_grid["max_q_mvar"] = required_q_mvar
+#
+#     return net, required_p_mw, required_q_mvar
+#
+#
 def add_cost_function_if_missing(net, element_type):
     """Ensure every element has an associated cost function"""
     if "poly_cost" not in net or net.poly_cost.empty:

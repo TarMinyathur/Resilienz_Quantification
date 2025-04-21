@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import time
 from count_elements import count_elements
-from diversity import calculate_shannon_evenness_and_variety
+from diversity import calculate_shannon_evenness_and_variety, calculate_transformer_voltage_diversity
 from disparity import calculate_disparity_space, calculate_line_disparity, calculate_transformer_disparity, \
     calculate_load_disparity
 from GenerationFactors import calculate_generation_factors
@@ -15,7 +15,7 @@ from initialize import add_indicator
 from initialize import add_disparity
 from indi_gt import GraphenTheorieIndicator
 from adjustments_new import set_missing_limits
-from adjustments_new import determine_minimum_ext_grid_power
+#from adjustments_new import determine_minimum_ext_grid_power
 from self_sufficiency import selfsuff
 from self_sufficiency import selfsufficiency_neu
 from flexibility import calculate_flexibility
@@ -30,54 +30,76 @@ import pandapower as pp
 from openpyxl import load_workbook
 
 grids = {
-    "1-HV-mixed--0-sw": lambda: sb.get_simbench_net("1-HV-mixed--0-sw"),
-    "1-HV-mixed--1-sw": lambda: sb.get_simbench_net("1-HV-mixed--1-sw"),
-    "1-HV-urban--0-sw": lambda: sb.get_simbench_net("1-HV-urban--0-sw"),
-    "1-HV-urban--1-sw": lambda: sb.get_simbench_net("1-HV-urban--1-sw"),
-    "1-HVMV-mixed-1.105-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-1.105-0-sw"),
-    "1-HVMV-mixed-1.105-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-1.105-1-no_sw"),
-    "1-HVMV-mixed-2.102-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-0-sw"),
-    "1-HVMV-mixed-2.102-1-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-1-sw"),
-    "1-HVMV-mixed-4.101-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-0-sw"),
-    "1-HVMV-mixed-4.101-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-1-no_sw"),
-
-    "1-HVMV-urban-2.203-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-0-no_sw"),
-    "1-HVMV-urban-2.203-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-1-sw"),
-    "1-HVMV-urban-3.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-0-no_sw"),
-    "1-HVMV-urban-3.201-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-1-sw"),
-    "1-HVMV-urban-4.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-4.201-0-no_sw"),
-    "1-HVMV-urban-4.201-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-4.201-1-sw"),
-    "1-HVMV-urban-all-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-all-0-no_sw"),
-    "1-MV-comm--0-sw": lambda: sb.get_simbench_net("1-MV-comm--0-sw"),
-    "1-MV-comm--1-sw": lambda: sb.get_simbench_net("1-MV-comm--1-sw"),
-    "1-MV-comm--2-sw": lambda: sb.get_simbench_net("1-MV-comm--2-sw"),
-    "1-MV-rural--0-sw": lambda: sb.get_simbench_net("1-MV-rural--0-sw"),
-    "1-MV-rural--1-sw": lambda: sb.get_simbench_net("1-MV-rural--1-sw"),
-    "1-MV-urban--0-sw": lambda: sb.get_simbench_net("1-MV-urban--0-sw"),
-    "1-MV-urban--1-sw": lambda: sb.get_simbench_net("1-MV-urban--1-sw"),
-    "1-MV-urban--2-sw": lambda: sb.get_simbench_net("1-MV-urban--2-sw"),
-    "1-MVLV-comm-3.403-0-sw": lambda: sb.get_simbench_net("1-MVLV-comm-3.403-0-sw"),
-    "1-MVLV-comm-3.403-1-no_sw": lambda: sb.get_simbench_net("1-MVLV-comm-3.403-1-no_sw"),
-    "1-MVLV-rural-2.107-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"),
-    "1-MVLV-semiurb-3.202-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),
-    "1-MVLV-urban-5.303-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"),
-    "GBreducednetwork": pn.GBreducednetwork,
-    "case118": pn.case118,
-    "case14": pn.case14,
-    "case24_ieee_rts": pn.case24_ieee_rts,
-    "case30": pn.case30,
-    "case33bw": pn.case33bw,
-    "case39": pn.case39,
-    "case5": pn.case5,
-    "case6ww": pn.case6ww,
-    "case9": pn.case9,
-    "create_cigre_network_lv": pn.create_cigre_network_lv,
-    "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
-    "example_simple": lambda: increase_line_limits(pn.example_simple(), 1.5),
-    "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
-    "mv_oberrhein": pn.mv_oberrhein,
-    "example_multivoltage": pn.example_multivoltage,
-    "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
+    # "1-HV-mixed--0-sw": lambda: sb.get_simbench_net("1-HV-mixed--0-sw"),
+    # "1-HV-mixed--1-sw": lambda: sb.get_simbench_net("1-HV-mixed--1-sw"),
+    # "1-HV-urban--0-sw": lambda: sb.get_simbench_net("1-HV-urban--0-sw"),
+    # "1-HV-urban--1-sw": lambda: sb.get_simbench_net("1-HV-urban--1-sw"),
+    # "1-HVMV-mixed-1.105-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-1.105-0-sw"),
+    # "1-HVMV-mixed-1.105-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-1.105-1-no_sw"),
+    # "1-HVMV-mixed-2.102-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-0-sw"),
+    # "1-HVMV-mixed-2.102-1-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-2.102-1-sw"),
+    # "1-HVMV-mixed-4.101-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-0-sw"),
+    # "1-HVMV-mixed-4.101-1-no_sw": lambda: sb.get_simbench_net("1-HVMV-mixed-4.101-1-no_sw"),
+    #
+    # "1-HVMV-urban-2.203-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-0-no_sw"),
+    # "1-HVMV-urban-2.203-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-2.203-1-sw"),
+    # "1-HVMV-urban-3.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-0-no_sw"),
+    # "1-HVMV-urban-3.201-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-3.201-1-sw"),
+    # "1-HVMV-urban-4.201-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-4.201-0-no_sw"),
+    # "1-HVMV-urban-4.201-1-sw": lambda: sb.get_simbench_net("1-HVMV-urban-4.201-1-sw"),
+    # "1-HVMV-urban-all-0-no_sw": lambda: sb.get_simbench_net("1-HVMV-urban-all-0-no_sw"),
+    # "1-MV-comm--0-sw": lambda: sb.get_simbench_net("1-MV-comm--0-sw"),
+    # "1-MV-comm--1-sw": lambda: sb.get_simbench_net("1-MV-comm--1-sw"),
+    # "1-MV-comm--2-sw": lambda: sb.get_simbench_net("1-MV-comm--2-sw"),
+    # "1-MV-rural--0-sw": lambda: sb.get_simbench_net("1-MV-rural--0-sw"),
+    # "1-MV-rural--1-sw": lambda: sb.get_simbench_net("1-MV-rural--1-sw"),
+    # "1-MV-urban--0-sw": lambda: sb.get_simbench_net("1-MV-urban--0-sw"),
+    # "1-MV-urban--1-sw": lambda: sb.get_simbench_net("1-MV-urban--1-sw"),
+    # "1-MV-urban--2-sw": lambda: sb.get_simbench_net("1-MV-urban--2-sw"),
+    # "1-MVLV-comm-3.403-0-sw": lambda: sb.get_simbench_net("1-MVLV-comm-3.403-0-sw"),
+    # "1-MVLV-comm-3.403-1-no_sw": lambda: sb.get_simbench_net("1-MVLV-comm-3.403-1-no_sw"),
+    # "1-MVLV-rural-2.107-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-rural-2.107-0-no_sw"),
+    # "1-MVLV-semiurb-3.202-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-semiurb-3.202-0-no_sw"),
+    # "1-MVLV-urban-5.303-0-no_sw": lambda: sb.get_simbench_net("1-MVLV-urban-5.303-0-no_sw"),
+    # "GBreducednetwork": pn.GBreducednetwork,
+    # "case118": pn.case118,
+    # "case14": pn.case14,
+    # "case24_ieee_rts": pn.case24_ieee_rts,
+    # "case30": pn.case30,
+    # "case33bw": pn.case33bw,
+    # "case39": pn.case39,
+    # "case5": pn.case5,
+    # "case6ww": pn.case6ww,
+    # "case9": pn.case9,
+    # "create_cigre_network_lv": pn.create_cigre_network_lv,
+    # "create_cigre_network_mv_all": lambda: pn.create_cigre_network_mv(with_der="all"),
+    # "example_simple": pn.example_simple,
+    # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
+    # "mv_oberrhein": pn.mv_oberrhein,
+    # "example_multivoltage": pn.example_multivoltage,
+     "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
+    # # # # Low-voltage grids
+    # "1-LV-rural1--0-sw": lambda: sb.get_simbench_net("1-LV-rural1--0-sw"),
+    # "1-LV-rural2--0-sw": lambda: sb.get_simbench_net("1-LV-rural2--0-sw"),
+    # "1-LV-rural2--1-sw": lambda: sb.get_simbench_net("1-LV-rural2--1-sw"),
+    # "1-LV-rural2--2-sw": lambda: sb.get_simbench_net("1-LV-rural2--2-sw"),
+    # "1-LV-rural3--0-sw": lambda: sb.get_simbench_net("1-LV-rural3--0-sw"),
+    # "1-LV-rural3--1-sw": lambda: sb.get_simbench_net("1-LV-rural3--1-sw"),
+    # "1-LV-rural3--2-sw": lambda: sb.get_simbench_net("1-LV-rural3--2-sw"),
+    # "1-LV-semiurb4--0-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--0-sw"),
+    # "1-LV-semiurb4--1-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--1-sw"),
+    # "1-LV-semiurb4--2-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--2-sw"),
+    # "1-LV-semiurb5--0-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--0-sw"),
+    # "1-LV-semiurb5--1-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--1-sw"),
+    # "1-LV-semiurb5--2-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--2-sw"),
+    # "1-LV-urban6--0-sw": lambda: sb.get_simbench_net("1-LV-urban6--0-sw"),
+    # "1-LV-urban6--1-sw": lambda: sb.get_simbench_net("1-LV-urban6--1-sw"),
+    # "1-LV-urban6--2-sw": lambda: sb.get_simbench_net("1-LV-urban6--2-sw"),
+    #     # #
+    #     # # # # Medium-voltage grids (not already added)
+    # "1-MV-semiurb--0-sw": lambda: sb.get_simbench_net("1-MV-semiurb--0-sw"),
+    # "1-MV-semiurb--1-sw": lambda: sb.get_simbench_net("1-MV-semiurb--1-sw"),
+    # "1-MV-semiurb--2-sw": lambda: sb.get_simbench_net("1-MV-semiurb--2-sw"),
 }
 
 
@@ -143,13 +165,15 @@ selected_indicators = {
     "Line Variety": True,
     "Load Shannon Evenness": True,
     "Load Variety": True,
+    "Transformer Shannon Evenness": True,
+    "Transformer Variety": True,
     "Disparity Generators": True,
     "Disparity Loads": True,
     "Disparity Transformers": True,
     "Disparity Lines": True,
-    "N-3 Redundancy": False,
+    "N-3 Redundancy": True,
     "n_3_redundancy_print": False,
-    "Redundancy": False,
+    "Redundancy": True,
     "GraphenTheorie": True,
     "Flexibility": True,
     "Flexibility_fxor": True,
@@ -164,23 +188,23 @@ selected_scenario = {
     "all": False,
     "Flood": {"active": True, "runs": 100},
     "Earthquake": {"active": True, "runs": 100},
-    "Dunkelflaute": {"active": True, "runs": 10},
+    "Dunkelflaute": {"active": True, "runs": 100},
     "Storm": {"active": True, "runs": 100},
     "Fire": {"active": False, "runs": 20},
     "Line Overload": {"active": False, "runs": 10},
     "IT-Attack": {"active": False, "runs": 20},
     "Geopolitical_gas": {"active": False, "runs": 10},
     "Geopolitical_h2": {"active": False, "runs": 10},
-    "high_EE_generation": {"active": True, "runs": 25},
-    "high_load": {"active": True, "runs": 25},
-    "sabotage_trafo": {"active": True, "runs": 20},
+    "high_EE_generation": {"active": True, "runs": 100},
+    "high_load": {"active": True, "runs": 100},
+    "sabotage_trafo": {"active": True, "runs": 100},
     "print_results": True,
     "output_excel": True
 }
 
 
 # Main Function
-def run_analysis_for_single_grid(grid_name):
+def run_analysis_for_single_grid(grid_name, debug=False):
     start_timer = time.time()
     dfinalresults = pd.DataFrame(columns=['Indicator', 'Value'])
     ddisparity = pd.DataFrame(columns=['Name', 'Value', 'max Value', 'Verhaeltnis'])
@@ -212,21 +236,23 @@ def run_analysis_for_single_grid(grid_name):
                 print(load_df[col].value_counts(dropna=False))
             else:
                 print(f"\nColumn: {col} not present in the load table.")
-        print(net)
 
-        #print(net.bus)
-        #print(net.trafo)
-        #print(net.line)
+        if debug:
+            print(net)
 
-        # print("Generators:")
-        #print("gen")
-        #print(net.gen)
-        #print("sgen")
-        #print(net.sgen)
-        #print("storage")
-        #print(net.storage)
-        print("load")
-        print(net.load)
+            print(net.bus)
+            print(net.trafo)
+            print(net.line)
+
+            print("Generators:")
+            print("gen")
+            print(net.gen)
+            print("sgen")
+            print(net.sgen)
+            print("storage")
+            print(net.storage)
+            print("load")
+            print(net.load)
 
 
     if basic["Adjustments"]:
@@ -248,15 +274,15 @@ def run_analysis_for_single_grid(grid_name):
     #         selected_scenario["sabotage_trafo"]["active"] = False
     #         dfresultsscenario = add_indicator(dfresultsscenario, "sabotage_trafo", 2)
 
-    if net.sgen.empty or not net.sgen["type"].str.contains("fuel cell", case=False, na=False).any():
-        if selected_scenario["Geopolitical_h2"]["active"] == True:
-            selected_scenario["Geopolitical_h2"]["active"] = False
-            dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 2)
-
-    if net.sgen.empty or not net.sgen["type"].str.contains("CHP|Gasturbine", case=False, na=False).any():
-        if selected_scenario["Geopolitical_gas"]["active"] == True:
-            selected_scenario["Geopolitical_gas"]["active"] = False
-            dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_gas", 2)
+    # if net.sgen.empty or not net.sgen["type"].str.contains("fuel cell", case=False, na=False).any():
+    #     if selected_scenario["Geopolitical_h2"]["active"] == True:
+    #         selected_scenario["Geopolitical_h2"]["active"] = False
+    #         dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_h2", 2)
+    #
+    # if net.sgen.empty or not net.sgen["type"].str.contains("CHP|Gasturbine", case=False, na=False).any():
+    #     if selected_scenario["Geopolitical_gas"]["active"] == True:
+    #         selected_scenario["Geopolitical_gas"]["active"] = False
+    #         dfresultsscenario = add_indicator(dfresultsscenario, "Geopolitical_gas", 2)
 
     if selected_indicators["all"]:
         # Setze alle anderen Indikatoren auf True
@@ -284,7 +310,8 @@ def run_analysis_for_single_grid(grid_name):
             'generation': 10,
             # Adjust this based on your actual known types (sgen: solar, wind, biomass, gen: gas, coal, nuclear, generator, static generator; storage: battery, hydro,
             'line': 2,  # "ol" (overhead line) and "cs" (cable system)
-            'load': 10
+            'load': 10,
+            'transformer': 14
             # Example: 10 known types of loads (residential, commercial, industrial, agricultaral, transport, municipal, dynamic, static, critical, non-critical
         }
 
@@ -299,8 +326,9 @@ def run_analysis_for_single_grid(grid_name):
                                                                                                     'generation'])
         evenness_values.append(evenness)
         variety_values.append(variety_scaled)
-        dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness_entropy)
-        dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness scaled", evenness)
+        if selected_indicators["Generation Shannon Evenness"]:
+            dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness", evenness_entropy)
+            dfinalresults = add_indicator(dfinalresults, "Generation Shannon Evenness scaled", evenness)
         if selected_indicators["Generation Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Generation Variety", variety)
             dfinalresults = add_indicator(dfinalresults, "Generation Variety scaled", variety_scaled)
@@ -310,8 +338,9 @@ def run_analysis_for_single_grid(grid_name):
                                                                                                 max_known_types['line'])
         evenness_values.append(evenness)
         variety_values.append(variety_scaled)
-        dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness_entropy)
-        dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness scaled", evenness)
+        if selected_indicators["Line Shannon Evenness"]:
+            dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness", evenness_entropy)
+            dfinalresults = add_indicator(dfinalresults, "Line Shannon Evenness scaled", evenness)
         if selected_indicators["Line Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Line Variety", variety)
             dfinalresults = add_indicator(dfinalresults, "Line Variety scaled", variety_scaled)
@@ -321,11 +350,33 @@ def run_analysis_for_single_grid(grid_name):
                                                                                                 max_known_types['load'])
         evenness_values.append(evenness)
         variety_values.append(variety_scaled)
-        dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness_entropy)
-        dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness scaled", evenness)
+        if selected_indicators["Load Shannon Evenness"]:
+            dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness_entropy)
+            dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness scaled", evenness)
         if selected_indicators["Load Variety"]:
             dfinalresults = add_indicator(dfinalresults, "Load Variety", variety)
             dfinalresults = add_indicator(dfinalresults, "Load Variety scaled", variety_scaled)
+
+    if selected_indicators["Transformer Shannon Evenness"] or selected_indicators["Transformer Variety"]:
+        transformer_data = net.trafo  # Annahme: net.trafo enthält die Transformer-Daten
+        bus_data = net.bus  # Annahme: net.bus enthält die Busdaten mit Spannungsebenen
+
+        evenness, variety, variety_scaled, max_variety, evenness_entropy = calculate_transformer_voltage_diversity(
+            transformer_data,
+            bus_data,
+            max_known_voltage_levels=14
+        )
+
+        evenness_values.append(evenness)
+        variety_values.append(variety_scaled)
+
+        if selected_indicators["Transformer Shannon Evenness"]:
+            dfinalresults = add_indicator(dfinalresults, "Transformer Shannon Evenness", evenness_entropy)
+            dfinalresults = add_indicator(dfinalresults, "Transformer Shannon Evenness scaled", evenness)
+
+        if selected_indicators["Transformer Variety"]:
+            dfinalresults = add_indicator(dfinalresults, "Transformer Variety", variety)
+            dfinalresults = add_indicator(dfinalresults, "Transformer Variety scaled", variety_scaled)
 
     if selected_indicators["Generation Shannon Evenness"] or selected_indicators["Generation Variety"] or \
             selected_indicators["Load Shannon Evenness"] or selected_indicators["Load Variety"] or selected_indicators[
@@ -428,8 +479,6 @@ def run_analysis_for_single_grid(grid_name):
     if selected_indicators["Disparity Transformers"]:
         disparity_df_trafo, max_int_trafo = calculate_transformer_disparity(net)
         integral_value_trafo = disparity_df_trafo.values.sum()
-        print(disparity_df_trafo)
-        print(ddisparity)
         if integral_value_trafo == 0 or disparity_df_trafo.empty:
             print("Disparity Berechnung für Trafos war fehlerhaft und wird mit 0 ersetzt")
             ratio_trafo = 0
@@ -497,22 +546,24 @@ def run_analysis_for_single_grid(grid_name):
 
         # dfinalresults = add_indicator(dfinalresults, "Load Shannon Evenness", evenness)
         # Ausgabe der Indikatoren pro Komponente:
-        print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
-        for comp, inds in component_indicators.items():
-            print(f"{comp.capitalize()}:")
-            print(f"  Lastfluss: {inds['lf']:.3f}")
-            print(f"  Redundanz: {inds['red']:.3f}")
-            print(f"  Kombiniert: {inds['combined']:.3f}")
 
-        # Ergebnisse ausgeben
-        print("\nErgebnisse der N-2-Redundanzprüfung:")
-        for element, stats in red_results.items():
-            print(f"{element.capitalize()}: Erfolg: {stats['Success']}, Fehlgeschlagen: {stats['Failed']}")
+        if debug:
+            print("Komponentenindikatoren (1 = optimal, 0 = schlecht):")
+            for comp, inds in component_indicators.items():
+                print(f"{comp.capitalize()}:")
+                print(f"  Lastfluss: {inds['lf']:.3f}")
+                print(f"  Redundanz: {inds['red']:.3f}")
+                print(f"  Kombiniert: {inds['combined']:.3f}")
 
-        print("\nGesamtindikatoren:")
-        print(f"  Lastfluss Gesamt: {Lastfluss:.3f}")
-        print(f"  N-2 Redundanz Gesamt: {n2_Redundanz:.3f}")
-        print(f"  Kombinierter Gesamtindikator: {kombi:.3f}")
+            # Ergebnisse ausgeben
+            print("\nErgebnisse der N-2-Redundanzprüfung:")
+            for element, stats in red_results.items():
+                print(f"{element.capitalize()}: Erfolg: {stats['Success']}, Fehlgeschlagen: {stats['Failed']}")
+
+            print("\nGesamtindikatoren:")
+            print(f"  Lastfluss Gesamt: {Lastfluss:.3f}")
+            print(f"  N-2 Redundanz Gesamt: {n2_Redundanz:.3f}")
+            print(f"  Kombinierter Gesamtindikator: {kombi:.3f}")
 
     if selected_indicators["Flexibility"]:
         dflexiresults = calculate_flexibility(net)
@@ -622,7 +673,7 @@ def run_analysis_for_single_grid(grid_name):
         output_path = os.path.join(output_dir, output_filename)
 
         # Liste der Sheets, die überschrieben werden dürfen: Sheet-Überschreibung erfolgt nur, wenn selected_indicators["output_excel"] aktiviert ist und das entsprechende Sheet in overwrite_sheets steht.
-        overwrite_sheets = ["Results Scenario"]
+        overwrite_sheets = ["Results Scenario", "Results Indicator"]
 
         file_exists = os.path.exists(output_path)
 

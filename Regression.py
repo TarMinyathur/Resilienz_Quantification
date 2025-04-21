@@ -68,7 +68,7 @@ def preprocess_data(df_indikatoren, df_szenarien):
     return df_merged
 
 
-def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, threshold, regression_type):
+def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name , threshold, regression_type):
     ergebnisse_szenarien = {}
     excluded_by_scenario = {}
     df_results = pd.DataFrame()
@@ -127,8 +127,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         ergebnisse_szenarien[szenario] = model
 
         # Plots und Summary speichern
-        plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type, threshold)
-        save_summary(model, szenario, output_dir, regression_type,threshold)
+        plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type, threshold, Name)
+        save_summary(model, szenario, output_dir, regression_type,threshold, Name)
 
         # === Shapiro-Wilk-Test für Residuen ===
         # === Residuen für OLS prüfen ===
@@ -276,7 +276,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     df_normaltests = pd.DataFrame(normaltest_rows)
 
     # Excel Export am Ende
-    export_path = os.path.join(output_dir, f"regression_results_min_less_indi{regression_type}{threshold}.xlsx")
+    export_path = os.path.join(output_dir, f"regression_results_{Name}_{regression_type}_{threshold}.xlsx")
     with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
         df_results.to_excel(writer, sheet_name='Regressionsdetails')
 
@@ -302,7 +302,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     return ergebnisse_szenarien
 
 
-def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type, threshold):
+def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type, threshold, Name):
 
     # Formatierter Regressionstyp für Beschriftungen
     reg_label = "Linear Regression" if regression_type == "ols" else "Beta-Regression"
@@ -355,7 +355,7 @@ def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_
 
     plt.subplots_adjust(bottom=0.3)
 
-    plot_path = os.path.join(output_dir, f"regression_less_indi_{reg_suffix}_{szenario}_{threshold}.png")
+    plot_path = os.path.join(output_dir, f"regression_{Name}_{reg_suffix}_{szenario}_{threshold}.png")
     plt.savefig(plot_path, dpi=400)
     plt.close()
 
@@ -380,8 +380,8 @@ def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_
         print(f"Keine Residuen verfügbar für Q-Q-Plot bei {szenario} ({reg_label})")
 
 
-def save_summary(models, szenario, output_dir,regression_type,threshold):
-    with open(os.path.join(output_dir, f"regression_summary_less_indi_{szenario}{regression_type}{threshold}.txt"), "w") as f:
+def save_summary(models, szenario, output_dir,regression_type,threshold, Name):
+    with open(os.path.join(output_dir, f"regression_summary_{Name}_{szenario}{regression_type}{threshold}.txt"), "w") as f:
         f.write(models.summary().as_text())
 
 
@@ -391,7 +391,7 @@ def save_summary(models, szenario, output_dir,regression_type,threshold):
 
 def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_less_Indi.xlsx"
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_min_Indi.xlsx"
 
     # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
@@ -400,12 +400,22 @@ def main():
     df_indikatoren = pd.read_excel(excel_file, sheet_name="Indikatoren_final")
     df_szenarien = pd.read_excel(excel_file, sheet_name="Stressoren_final")
 
+    # Liste der zu ignorierenden Indikatoren
+    #zu_ignorierende_indikatoren = ["Time required","Flexibility Average", "Flexibility Feasible Operating Region scaled", "Redundancy Average", "Redundancy N-3", "Self Sufficiency At Bus Level", "Self Sufficiency System"]  # <- Hier anpassen
+    zu_ignorierende_indikatoren = ["Time required"]  # <- Hier anpassen
+    Name = "min_Indi"
+
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
 
-    indikatoren_spalten = [col for col in df_indikatoren.columns if col != "Netz"]
+    # Erstelle die Liste der zu verwendenden Indikatoren (alle außer "Netz" und ignorierte)
+    indikatoren_spalten = [
+        col for col in df_indikatoren.columns
+        if col != "Netz" and col not in zu_ignorierende_indikatoren
+    ]
+
     szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
 
-    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir,threshold=20, regression_type="ols")
+    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=10, regression_type="beta")
 
 
 if __name__ == "__main__":

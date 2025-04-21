@@ -304,48 +304,43 @@ Dieses Skript führt eine N-2-Redundanzprüfung mit pandapower durch.
 """
 
 
-def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout, max_calls=250):
+def n_2_redundancy_check(net_temp_red2, start_time, element_type, timeout, max_calls=150):
     """Überprüft die N-2-Redundanz für verschiedene Netzkomponenten."""
+
     if element_type not in ["line", "sgen", "gen", "trafo", "bus", "storage", "switch", "load"]:
         raise ValueError(f"Invalid element type for n_2 redundancy: {element_type}")
 
-    resultsa = {element_type: {"Success": 0, "Failed": 0}}
+    results = {element_type: {"Success": 0, "Failed": 0}}
 
-    # Early return if there are fewer than 2 elements
-    if net_temp_red2[element_type].empty or len(net_temp_red2[element_type].index) < 2:
-        return resultsa
+    element_table = net_temp_red2[element_type]
+    if element_table.empty or len(element_table.index) < 2:
+        return results
 
-    # Extract the indices and shuffle them if you want random pairs
-    index_list = list(net_temp_red2[element_type].index)
+    # Indices vorbereiten und zufällig mischen
+    index_list = list(element_table.index)
     random.shuffle(index_list)
 
-    # Create a generator for all 2-element combinations
-    element_pairs_gen = itertools.combinations(index_list, 2)
+    # Kombinationen von 2 zufälligen Elementen vorbereiten (max. max_calls)
+    element_pairs = list(itertools.islice(itertools.combinations(index_list, 2), max_calls))
 
-    should_stop_n2 = False
-
-    # Parallelisierung der Netzberechnungen
     with ProcessPoolExecutor(max_workers=3) as executor:
         futures = []
 
-        for pairs in islice(element_pairs_gen, max_calls):
-            if should_stop_n2:
-                break
-
-            net_temp_red2_n2_copy = net_temp_red2.deepcopy()
-            futures.append(executor.submit(process_pair, element_type, pairs, net_temp_red2_n2_copy))
-
-            # Check timeout after each task submission
+        for pair in element_pairs:
+            # Timeout prüfen vor jedem Submit
             if (time.time() - start_time) > timeout:
                 print("Timeout reached. Ending process.")
-                should_stop_n2 = True
                 break
 
+            net_temp_red2_copy = net_temp_red2.deepcopy()
+            futures.append(executor.submit(process_pair, element_type, pair, net_temp_red2_copy))
+
+        # Ergebnisse einsammeln
         for future in futures:
             element_type_returned, status = future.result()
-            resultsa[element_type_returned][status] += 1
+            results[element_type_returned][status] += 1
 
-    return resultsa
+    return results
 
 
 def process_pair(element_type, pair, net_temp_red2):
