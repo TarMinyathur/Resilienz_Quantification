@@ -149,7 +149,7 @@ def scenarios(net_temp_stress, selected_scenarios, debug=False):
 # geo_data optional, if no defined -> set False, see Class Scenario
 def get_scenarios():
     return [
-        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.5), random_select=True),
+        Scenario("flood", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.7), random_select=True),
         Scenario("earthquake", mode="component",
                  targets=random.sample(["overhead_lines", "underground_lines", "trafo", "load", "gen", "sgen"], k=random.randint(1,6)),
                  reduction_rate=random.uniform(0, 1),
@@ -163,7 +163,16 @@ def get_scenarios():
         Scenario("geopolitical_h2", mode="types", targets=["fuel_cell"], reduction_rate=random.uniform(0, 1), random_select=True),
         Scenario("high_load", mode="types", targets=["load"], reduction_rate=random.uniform(1, 3)),
         Scenario("sabotage_trafo", mode="component", targets=["trafo"], reduction_rate=random.uniform(0 , 1), random_select=True),
-        Scenario("high_ee_generation", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1, 3)),
+        Scenario("it_attack_on_renewables", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1, 3)),
+        Scenario("fire", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.01, 0.1), random_select=True),
+        Scenario("softwarefehler", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.3), random_select=True),
+        Scenario("kaelteeinbruch", mode="component", targets=random.sample(["overhead_lines", "underground_lines"], k=random.randint(1, 2)),
+                 reduction_rate=random.uniform(0.6, 0.85),
+                 random_select=True),
+        Scenario("global_energy_crisis", mode="types",
+                 targets=["gen"],
+                 reduction_rate=random.uniform(0.2, 0.6),  # Partial availability of conventional generation
+                 random_select=True),
     ]
 
 

@@ -94,7 +94,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         if len(y_clean) >= 3:
             stat_y, p_y = shapiro(y_clean)
             print(f"\nShapiro-Wilk-Test für Zielvariable '{szenario}':")
-            print(f"  Teststatistik = {stat_y:.4f}, p-Wert = {p_y:.4f}")
+            print(f"  Teststatistik = {stat_y:.2f}, p-Wert = {p_y:.2f}")
             if p_y < 0.05:
                 print("  ⚠️ Achtung: Die Zielvariable ist möglicherweise nicht normalverteilt.")
         else:
@@ -136,13 +136,22 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             residuals = model.resid.dropna()
             if len(residuals) >= 3:
                 stat_r, p_r = shapiro(residuals)
-                print(f"Shapiro-Test für Residuen von '{szenario}': stat = {stat_r:.4f}, p = {p_r:.4f}")
+                print(f"Shapiro-Test für Residuen von '{szenario}': stat = {stat_r:.2f}, p = {p_r:.2f}")
 
         indikatoren = [col for col in indikatoren_spalten if col in model.params.index]
         params = model.params.loc[indikatoren]
         std_errors = model.bse.loc[indikatoren]
         pvalues = model.pvalues.loc[indikatoren]
         conf_int = model.conf_int().loc[indikatoren]
+
+        if regression_type == "ols":
+            X_std = (X_n - X_n.mean()) / X_n.std()
+            y_std = (y - y.mean()) / y.std()
+            X_std_const = sm.add_constant(X_std)
+            model_std = sm.OLS(y_std, X_std_const).fit()
+            standardized_betas = model_std.params.loc[indikatoren]
+        else:
+            standardized_betas = pd.Series(index=indikatoren, data=[np.nan] * len(indikatoren))
 
         params_stars_series = pd.Series(index=params.index, dtype="object")
         for idx in params.index:
@@ -156,7 +165,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
                 star = "*"
             else:
                 star = ""
-            params_stars_series[idx] = f"{param_val:.4f}{star}"
+            params_stars_series[idx] = f"{param_val:.2f}{star}"
 
         # --- 2) Series für P-Werte mit Sternchen (optional, selbes Prinzip) ---
         pvalues_stars_series = pd.Series(index=pvalues.index, dtype="object")
@@ -170,30 +179,31 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
                 star = "*"
             else:
                 star = ""
-            pvalues_stars_series[idx] = f"{p_val:.4f}{star}"
+            pvalues_stars_series[idx] = f"{p_val:.2f}{star}"
 
         # Stelle sicher, dass alle Regressor-Namen im Index von df_results vorhanden sind
         df_results = df_results.reindex(index=df_results.index.union(params.index))
 
         # Schreibe Parameterwerte und Standardfehler
         df_results.loc[params.index, f'coeff_{szenario}'] = params_stars_series
-        df_results.loc[std_errors.index, f'std_error_{szenario}'] = std_errors.round(4)
+        df_results.loc[std_errors.index, f'std_error_{szenario}'] = std_errors.round(2)
+        df_results.loc[standardized_betas.index, f'std_beta_{szenario}'] = standardized_betas.round(2)
 
         # Statistische Testwerte (t oder z) – je nach Regressions-Typ
         if regression_type == "ols":
-            test_stats = model.tvalues.drop(labels=['const', 'Intercept'], errors='ignore').round(4)
+            test_stats = model.tvalues.drop(labels=['const', 'Intercept'], errors='ignore').round(2)
             df_results.loc[test_stats.index, f't_value_{szenario}'] = test_stats
         else:
-            test_stats = (params / std_errors).round(4)  # z-Werte bei GLM
+            test_stats = (params / std_errors).round(2)  # z-Werte bei GLM
             df_results.loc[test_stats.index, f'Z_value_{szenario}'] = test_stats
 
         # P-Werte
-        df_results.loc[pvalues.index, f'P>t_{szenario}'] = pvalues.round(4)
+        df_results.loc[pvalues.index, f'P>t_{szenario}'] = pvalues.round(2)
 
         # Konfidenzintervall als formatierter String vorbereiten
         conf_colname = f'conf_int_{szenario}'
         conf_formatted = conf_int.loc[params.index].apply(
-            lambda x: f"[{x[0]:.3f}, {x[1]:.3f}]", axis=1
+            lambda x: f"[{x[0]:.2f}, {x[1]:.2f}]", axis=1
         )
 
         # Sicherheitshalber vorbereiten (nicht zwingend, aber sauber)
@@ -205,22 +215,27 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
 
         if 'df_model_metrics' not in locals():
             df_model_metrics = pd.DataFrame(columns=[
-                "R² (Modellgüte)", "Adj. R²", "AIC", "BIC", "Log-Likelihood", "Anzahl Beobachtungen"
+                "R²", "Adjusted R²", "F-Statistic", "F-Test p-value", "AIC", "BIC",
+                "Log-Likelihood", "Number of Observations"
             ])
 
         if regression_type == "ols":
-            r_squared = round(model.rsquared, 4)
-            adj_r_squared = round(model.rsquared_adj, 4)
+            r_squared = round(model.rsquared, 2)
+            adj_r_squared = round(model.rsquared_adj, 2)
+            f_stat = round(model.fvalue, 2)
+            f_pval = round(model.f_pvalue, 2)
         else:
-            r_squared = adj_r_squared = np.nan
+            r_squared = adj_r_squared = f_stat = f_pval = np.nan
 
         df_model_metrics.loc[szenario] = {
-            "R² (Modellgüte)": r_squared,
-            "Adj. R²": adj_r_squared,
-            "AIC": round(model.aic, 4),
-            "BIC": round(model.bic, 4),
-            "Log-Likelihood": round(model.llf, 4),
-            "Anzahl Beobachtungen": int(model.nobs)
+            "R²": r_squared,
+            "Adjusted R²": adj_r_squared,
+            "F-Statistic": f_stat,
+            "F-Test p-value": f_pval,
+            "AIC": round(model.aic, 2),
+            "BIC": round(model.bic, 2),
+            "Log-Likelihood": round(model.llf, 2),
+            "Number of Observations": int(model.nobs)
         }
 
 
@@ -238,8 +253,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             normaltest_rows.append({
                 "Szenario": szenario,
                 "Testtyp": "Zielvariable",
-                "Shapiro-Statistik": round(stat_y, 4),
-                "p-Wert": round(p_y, 4),
+                "Shapiro-Statistik": round(stat_y, 2),
+                "p-Wert": round(p_y, 2),
                 "Interpretation": comment_y
             })
         else:
@@ -268,8 +283,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             normaltest_rows.append({
                 "Szenario": szenario,
                 "Testtyp": "Residuen",
-                "Shapiro-Statistik": stat_r if stat_r is None else round(stat_r, 4),
-                "p-Wert": p_r if p_r is None else round(p_r, 4),
+                "Shapiro-Statistik": stat_r if stat_r is None else round(stat_r, 2),
+                "p-Wert": p_r if p_r is None else round(p_r, 2),
                 "Interpretation": comment_r
             })
 
@@ -292,7 +307,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             for col, vif in ex_list:
                 excluded_rows.append({
                     "Indikator": col,
-                    "VIF-Wert": round(vif, 4)
+                    "VIF-Wert": round(vif, 2)
                 })
 
         df_excluded = pd.DataFrame(excluded_rows)
@@ -391,7 +406,9 @@ def save_summary(models, szenario, output_dir,regression_type,threshold, Name):
 
 def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_min_Indi.xlsx"
+    #Ergebnisse_final_EP_min_Netze_AVG
+    #Ergebnisse_final_EP_min_Netze_min_Indi
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_AVG.xlsx"
 
     # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
@@ -400,10 +417,20 @@ def main():
     df_indikatoren = pd.read_excel(excel_file, sheet_name="Indikatoren_final")
     df_szenarien = pd.read_excel(excel_file, sheet_name="Stressoren_final")
 
+    # ---- Spalte in df_szenarien umbenennen ----
+    umzubenennende_spalte = "high_EE_generation"   # <- Hier alten Namen eintragen
+    neuer_spaltenname = "IT Attack on Renewables"       # <- Hier neuen Namen eintragen
+
+    if umzubenennende_spalte in df_szenarien.columns:
+        df_szenarien = df_szenarien.rename(columns={umzubenennende_spalte: neuer_spaltenname})
+    else:
+        print(f"Warnung: Spalte '{umzubenennende_spalte}' nicht in Stressoren_final gefunden.")
+
     # Liste der zu ignorierenden Indikatoren
-    #zu_ignorierende_indikatoren = ["Time required","Flexibility Average", "Flexibility Feasible Operating Region scaled", "Redundancy Average", "Redundancy N-3", "Self Sufficiency At Bus Level", "Self Sufficiency System"]  # <- Hier anpassen
-    zu_ignorierende_indikatoren = ["Time required"]  # <- Hier anpassen
-    Name = "min_Indi"
+    zu_ignorierende_indikatoren = ["Time required","Flexibility Average", "Flexibility Feasible Operating Region scaled", "Redundancy Average", "Redundancy N-3", "Self Sufficiency At Bus Level", "Self Sufficiency System"]  # <- Hier anpassen
+    #zu_ignorierende_indikatoren = ["Time required"]  # <- Hier anpassen
+
+    Name = "ols_AVG_4"
 
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
 
@@ -415,7 +442,7 @@ def main():
 
     szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
 
-    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=10, regression_type="beta")
+    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=4, regression_type="ols")
 
 
 if __name__ == "__main__":
