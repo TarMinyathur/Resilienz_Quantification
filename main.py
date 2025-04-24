@@ -77,29 +77,29 @@ grids = {
     # "ieee_european_lv_asymmetric": pn.ieee_european_lv_asymmetric,
     # "mv_oberrhein": pn.mv_oberrhein,
     # "example_multivoltage": pn.example_multivoltage,
-     "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
+    # "1-HVMV-mixed-all-0-sw": lambda: sb.get_simbench_net("1-HVMV-mixed-all-0-sw"),
     # # # # Low-voltage grids
-    # "1-LV-rural1--0-sw": lambda: sb.get_simbench_net("1-LV-rural1--0-sw"),
-    # "1-LV-rural2--0-sw": lambda: sb.get_simbench_net("1-LV-rural2--0-sw"),
-    # "1-LV-rural2--1-sw": lambda: sb.get_simbench_net("1-LV-rural2--1-sw"),
-    # "1-LV-rural2--2-sw": lambda: sb.get_simbench_net("1-LV-rural2--2-sw"),
-    # "1-LV-rural3--0-sw": lambda: sb.get_simbench_net("1-LV-rural3--0-sw"),
-    # "1-LV-rural3--1-sw": lambda: sb.get_simbench_net("1-LV-rural3--1-sw"),
-    # "1-LV-rural3--2-sw": lambda: sb.get_simbench_net("1-LV-rural3--2-sw"),
-    # "1-LV-semiurb4--0-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--0-sw"),
-    # "1-LV-semiurb4--1-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--1-sw"),
-    # "1-LV-semiurb4--2-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--2-sw"),
-    # "1-LV-semiurb5--0-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--0-sw"),
-    # "1-LV-semiurb5--1-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--1-sw"),
-    # "1-LV-semiurb5--2-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--2-sw"),
-    # "1-LV-urban6--0-sw": lambda: sb.get_simbench_net("1-LV-urban6--0-sw"),
-    # "1-LV-urban6--1-sw": lambda: sb.get_simbench_net("1-LV-urban6--1-sw"),
-    # "1-LV-urban6--2-sw": lambda: sb.get_simbench_net("1-LV-urban6--2-sw"),
+    "1-LV-rural1--0-sw": lambda: sb.get_simbench_net("1-LV-rural1--0-sw"),
+    "1-LV-rural2--0-sw": lambda: sb.get_simbench_net("1-LV-rural2--0-sw"),
+    "1-LV-rural2--1-sw": lambda: sb.get_simbench_net("1-LV-rural2--1-sw"),
+    "1-LV-rural2--2-sw": lambda: sb.get_simbench_net("1-LV-rural2--2-sw"),
+    "1-LV-rural3--0-sw": lambda: sb.get_simbench_net("1-LV-rural3--0-sw"),
+    "1-LV-rural3--1-sw": lambda: sb.get_simbench_net("1-LV-rural3--1-sw"),
+    "1-LV-rural3--2-sw": lambda: sb.get_simbench_net("1-LV-rural3--2-sw"),
+    "1-LV-semiurb4--0-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--0-sw"),
+    "1-LV-semiurb4--1-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--1-sw"),
+    "1-LV-semiurb4--2-sw": lambda: sb.get_simbench_net("1-LV-semiurb4--2-sw"),
+    "1-LV-semiurb5--0-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--0-sw"),
+    "1-LV-semiurb5--1-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--1-sw"),
+    "1-LV-semiurb5--2-sw": lambda: sb.get_simbench_net("1-LV-semiurb5--2-sw"),
+    "1-LV-urban6--0-sw": lambda: sb.get_simbench_net("1-LV-urban6--0-sw"),
+    "1-LV-urban6--1-sw": lambda: sb.get_simbench_net("1-LV-urban6--1-sw"),
+    "1-LV-urban6--2-sw": lambda: sb.get_simbench_net("1-LV-urban6--2-sw"),
     #     # #
     #     # # # # Medium-voltage grids (not already added)
-    # "1-MV-semiurb--0-sw": lambda: sb.get_simbench_net("1-MV-semiurb--0-sw"),
-    # "1-MV-semiurb--1-sw": lambda: sb.get_simbench_net("1-MV-semiurb--1-sw"),
-    # "1-MV-semiurb--2-sw": lambda: sb.get_simbench_net("1-MV-semiurb--2-sw"),
+    "1-MV-semiurb--0-sw": lambda: sb.get_simbench_net("1-MV-semiurb--0-sw"),
+    "1-MV-semiurb--1-sw": lambda: sb.get_simbench_net("1-MV-semiurb--1-sw"),
+    "1-MV-semiurb--2-sw": lambda: sb.get_simbench_net("1-MV-semiurb--2-sw"),
 }
 
 
@@ -156,31 +156,31 @@ basic = {
 
 selected_indicators = {
     "all": False,
-    "Self Sufficiency": True,
+    "Self Sufficiency": False,
     "show_self_sufficiency_at_bus": False,
-    "System Self Sufficiency": True,
-    "Generation Shannon Evenness": True,
-    "Generation Variety": True,
-    "Line Shannon Evenness": True,
-    "Line Variety": True,
-    "Load Shannon Evenness": True,
-    "Load Variety": True,
-    "Transformer Shannon Evenness": True,
-    "Transformer Variety": True,
-    "Disparity Generators": True,
-    "Disparity Loads": True,
-    "Disparity Transformers": True,
-    "Disparity Lines": True,
-    "N-3 Redundancy": True,
+    "System Self Sufficiency": False,
+    "Generation Shannon Evenness": False,
+    "Generation Variety": False,
+    "Line Shannon Evenness": False,
+    "Line Variety": False,
+    "Load Shannon Evenness": False,
+    "Load Variety": False,
+    "Transformer Shannon Evenness": False,
+    "Transformer Variety": False,
+    "Disparity Generators": False,
+    "Disparity Loads": False,
+    "Disparity Transformers": False,
+    "Disparity Lines": False,
+    "N-3 Redundancy": False,
     "n_3_redundancy_print": False,
-    "Redundancy": True,
-    "GraphenTheorie": True,
-    "Flexibility": True,
-    "Flexibility_fxor": True,
-    "Buffer": True,
+    "Redundancy": False,
+    "GraphenTheorie": False,
+    "Flexibility": False,
+    "Flexibility_fxor": False,
+    "Buffer": False,
     "show_spider_plot": False,
-    "print_results": True,
-    "output_excel": True
+    "print_results": False,
+    "output_excel": False
 }
 
 selected_scenario = {
@@ -190,14 +190,17 @@ selected_scenario = {
     "Earthquake": {"active": True, "runs": 100},
     "Dunkelflaute": {"active": True, "runs": 100},
     "Storm": {"active": True, "runs": 100},
-    "Fire": {"active": False, "runs": 20},
-    "Line Overload": {"active": False, "runs": 10},
-    "IT-Attack": {"active": False, "runs": 20},
-    "Geopolitical_gas": {"active": False, "runs": 10},
-    "Geopolitical_h2": {"active": False, "runs": 10},
-    "high_EE_generation": {"active": True, "runs": 100},
+    "Fire": {"active": True, "runs": 100},
+    #"Line Overload": {"active": False, "runs": 10},
+    #"IT-Attack": {"active": False, "runs": 20},
+    #"Geopolitical_gas": {"active": False, "runs": 10},
+    #"Geopolitical_h2": {"active": False, "runs": 10},
+    "it_attack_on_renewables": {"active": True, "runs": 100},
     "high_load": {"active": True, "runs": 100},
     "sabotage_trafo": {"active": True, "runs": 100},
+    "softwarefehler": {"active": True, "runs": 100},
+    "cold_snap": {"active": True, "runs": 100},
+    "global_energy_crisis": {"active": True, "runs": 100},
     "print_results": True,
     "output_excel": True
 }
@@ -268,6 +271,14 @@ def run_analysis_for_single_grid(grid_name, debug=False):
         if selected_scenario["Flood"]["active"] == True:
             selected_scenario["Flood"]["active"] = False
             dfresultsscenario = add_indicator(dfresultsscenario, "Flood", 2)
+
+        if selected_scenario["Fire"]["active"] == True:
+            selected_scenario["Fire"]["active"] = False
+            dfresultsscenario = add_indicator(dfresultsscenario, "Fire", 2)
+
+        if selected_scenario["softwarefehler"]["active"] == True:
+            selected_scenario["softwarefehler"]["active"] = False
+            dfresultsscenario = add_indicator(dfresultsscenario, "softwarefehler", 2)
     #
     # if net.trafo.empty:
     #     if selected_scenario["sabotage_trafo"]["active"] == True:
@@ -673,13 +684,13 @@ def run_analysis_for_single_grid(grid_name, debug=False):
         output_path = os.path.join(output_dir, output_filename)
 
         # Liste der Sheets, die überschrieben werden dürfen: Sheet-Überschreibung erfolgt nur, wenn selected_indicators["output_excel"] aktiviert ist und das entsprechende Sheet in overwrite_sheets steht.
-        overwrite_sheets = ["Results Scenario", "Results Indicator"]
+        overwrite_sheets = ["Results Scenario"]
 
         file_exists = os.path.exists(output_path)
 
         if file_exists:
             with pd.ExcelWriter(output_path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
-                if selected_indicators.get("output_excel") and "Results Scenario" in overwrite_sheets:
+                if selected_scenario["output_excel"] and "Results Scenario" in overwrite_sheets:
                     dfresultsscenario.T.to_excel(writer, sheet_name="Results Scenario", index=False)
 
                 if selected_indicators.get("output_excel") and "Results Indicator" in overwrite_sheets:

@@ -385,7 +385,7 @@ def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_
         plt.title(f"Q-Q-Plot der Residuen – {szenario}")
         plt.grid(True)
         plt.tight_layout()
-        qq_path = os.path.join(output_dir, f"qqplot_resid_{szenario}.png")
+        qq_path = os.path.join(output_dir, f"qqplot_resid_{Name}_{reg_suffix}_{szenario}_{threshold}.png")
         plt.savefig(qq_path, dpi=300)
 
         plt.close()
@@ -408,7 +408,7 @@ def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
     #Ergebnisse_final_EP_min_Netze_AVG
     #Ergebnisse_final_EP_min_Netze_min_Indi
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_AVG.xlsx"
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_min_Indi.xlsx"
 
     # Output-Verzeichnis
     output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
@@ -417,20 +417,12 @@ def main():
     df_indikatoren = pd.read_excel(excel_file, sheet_name="Indikatoren_final")
     df_szenarien = pd.read_excel(excel_file, sheet_name="Stressoren_final")
 
-    # ---- Spalte in df_szenarien umbenennen ----
-    umzubenennende_spalte = "high_EE_generation"   # <- Hier alten Namen eintragen
-    neuer_spaltenname = "IT Attack on Renewables"       # <- Hier neuen Namen eintragen
-
-    if umzubenennende_spalte in df_szenarien.columns:
-        df_szenarien = df_szenarien.rename(columns={umzubenennende_spalte: neuer_spaltenname})
-    else:
-        print(f"Warnung: Spalte '{umzubenennende_spalte}' nicht in Stressoren_final gefunden.")
-
     # Liste der zu ignorierenden Indikatoren
-    zu_ignorierende_indikatoren = ["Time required","Flexibility Average", "Flexibility Feasible Operating Region scaled", "Redundancy Average", "Redundancy N-3", "Self Sufficiency At Bus Level", "Self Sufficiency System"]  # <- Hier anpassen
-    #zu_ignorierende_indikatoren = ["Time required"]  # <- Hier anpassen
+    #zu_ignorierende_indikatoren = ["Time required","Flexibility Average", "Flexibility Feasible Operating Region scaled", "Redundancy Average", "Redundancy N-3", "Self Sufficiency At Bus Level", "Self Sufficiency System"]  # <- Hier anpassen
+    #zu_ignorierende_indikatoren = ["Time required","Disparity Generators scaled", "Disparity Lines scaled", "Disparity Loads scaled", "Disparity Transformers scaled", "Generation Shannon Evenness scaled", "Line Shannon Evenness scaled", "Load Shannon Evenness scaled", "Transformer Shannon Evenness scaled", "Generation Variety scaled", "Line Variety scaled", "Load Variety scaled", "Transformer Variety scaled"]  # <- Hier anpassen
+    zu_ignorierende_indikatoren = ["Time required", "Diversity Generation",	"Diversity Load",	"Diversity Transformers",	"Diversity Lines"]  # <- Hier anpassen
 
-    Name = "ols_AVG_4"
+    Name = "beta_neu_4"
 
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
 
@@ -442,7 +434,7 @@ def main():
 
     szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
 
-    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=4, regression_type="ols")
+    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=4, regression_type="beta")
 
 
 if __name__ == "__main__":

@@ -166,7 +166,7 @@ def get_scenarios():
         Scenario("it_attack_on_renewables", mode="types", targets=["PV", "WP", "Hydro", "Biomass"], reduction_rate=random.uniform(1, 3)),
         Scenario("fire", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.01, 0.1), random_select=True),
         Scenario("softwarefehler", mode="geo", targets=["n.a."], reduction_rate=random.uniform(0.1, 0.3), random_select=True),
-        Scenario("kaelteeinbruch", mode="component", targets=random.sample(["overhead_lines", "underground_lines"], k=random.randint(1, 2)),
+        Scenario("cold_snap", mode="component", targets=random.sample(["overhead_lines", "underground_lines"], k=random.randint(1, 2)),
                  reduction_rate=random.uniform(0.6, 0.85),
                  random_select=True),
         Scenario("global_energy_crisis", mode="types",
