@@ -18,7 +18,7 @@ def calculate_buffer(net_buff):
         print("Warning: total_load is zero or negative — buffer ratio set to 0.")
         buffer_ratio = 0
     else:
-        buffer_ratio = total_buffer_capacity / total_load  # to discuss value for buffer
+        buffer_ratio = total_buffer_capacity / total_load * 24  # to discuss value for buffer
 
     print(f"Buffer: {buffer_ratio:.4f}")
 
@@ -34,21 +34,17 @@ def check_battery_capacity(net_buff, buffer_sum):
         print("No batteries in net_buff")
     return buffer_sum
 
-
 def get_sgen(net_buff, buffer_sum):
-    sgen_types = ["Residential fuel cell", "CHP diesel", "Fuel cell"]  # tdb if further sgen types to include
+    sgen_types = ["Residential fuel cell", "CHP diesel"]  # tdb if further sgen types to include
 
     for sgen_type in sgen_types:
         filtered_sgen = net_buff.sgen[net_buff.sgen["name"].str.contains(sgen_type, case=False, na=False)]
         filtered_sgen = filtered_sgen[filtered_sgen["p_mw"] > 0]
-        sgen_capacity = filtered_sgen["p_mw"].sum()
+        sgen_capacity = filtered_sgen["p_mw"].sum() * 24
 
         if sgen_capacity > 0:
             buffer_sum.append({"type": sgen_type, "capacity": sgen_capacity})
 
-    return buffer_sum
-
-def get_sgen(net_buff, buffer_sum):
     # Static types (only need one keyword and a fixed scaling)
     static_sgen_categories = {
         "chp": 0.5,
@@ -103,7 +99,7 @@ def get_gen(net_buff, buffer_sum):
     for gen_type in gen_types:
         filtered_gen = net_buff.gen[net_buff.gen["name"].str.contains(gen_type, case=False, na=False)]
         filtered_gen = filtered_gen[filtered_gen["p_mw"] > 0]
-        gen_capacity = filtered_gen["p_mw"].sum()
+        gen_capacity = filtered_gen["p_mw"].sum() * 24
 
         if gen_capacity > 0:
             buffer_sum.append({"type": gen_type, "capacity": gen_capacity})
@@ -119,8 +115,8 @@ def get_flexible_loads(net_buff, buffer_sum):
         flexible_loads = net_buff.load[net_buff.load["controllable"] == True]
         flexible_loads = flexible_loads[flexible_loads["p_mw"] > 0]
 
-        private_loads = flexible_loads[flexible_loads["type"] == "private"]["p_mw"].sum() * 1.0  # 100 % flexible
-        business_loads = flexible_loads[flexible_loads["type"] == "business"]["p_mw"].sum() * 0.15  # 15 % flexible
+        private_loads = flexible_loads[flexible_loads["type"] == "private"]["p_mw"].sum() * 1.0 * 24 # 100 % flexible
+        business_loads = flexible_loads[flexible_loads["type"] == "business"]["p_mw"].sum() * 0.15 * 24  # 15 % flexible
 
         if private_loads > 0:
             buffer_sum.append({"type": "private load flexibility", "capacity": private_loads})
