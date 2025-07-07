@@ -68,7 +68,7 @@ def preprocess_data(df_indikatoren, df_szenarien):
     return df_merged
 
 
-def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name , threshold, regression_type):
+def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name , threshold, regression_type, Wooldrige):
     ergebnisse_szenarien = {}
     excluded_by_scenario = {}
     df_results = pd.DataFrame()
@@ -83,8 +83,8 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             print(f"Überspringe Regression für {szenario} (nur NaN oder konstante Werte).")
             continue
 
-        # === Transformiere y für Beta-Regression ===
-        if regression_type == "beta":
+        # === Transformiere y für fractional_logit-Regression ===
+        if regression_type == "fractional_logit" and Wooldrige == True:
             eps = 1e-6
             y = (y * (len(y) - 1) + 0.5) / len(y)  # Transformation in (0,1)
             y = y.clip(eps, 1 - eps)  # Falls nach Rundung noch 0/1 entstehen
@@ -113,7 +113,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         if regression_type == "ols":
             X_ols = sm.add_constant(X_n)
             model = sm.OLS(y, X_ols).fit()
-        elif regression_type == "beta":
+        elif regression_type == "fractional_logit":
             # Formel für GLM mit logit-Link
             data = X_n.copy()
             data['y'] = y
@@ -122,7 +122,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             model = smf.glm(formula=formula, data=data,
                             family=sm.families.Binomial(link=sm.families.links.Logit())).fit()
         else:
-            raise ValueError("Ungültiger Regressions-Typ. Bitte 'ols' oder 'beta' angeben.")
+            raise ValueError("Ungültiger Regressions-Typ. Bitte 'ols' oder 'fractional_logit' angeben.")
 
         ergebnisse_szenarien[szenario] = model
 
@@ -149,9 +149,9 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             y_std = (y - y.mean()) / y.std()
             X_std_const = sm.add_constant(X_std)
             model_std = sm.OLS(y_std, X_std_const).fit()
-            standardized_betas = model_std.params.loc[indikatoren]
+            standardized_fractional_logits = model_std.params.loc[indikatoren]
         else:
-            standardized_betas = pd.Series(index=indikatoren, data=[np.nan] * len(indikatoren))
+            standardized_fractional_logits = pd.Series(index=indikatoren, data=[np.nan] * len(indikatoren))
 
         params_stars_series = pd.Series(index=params.index, dtype="object")
         for idx in params.index:
@@ -187,7 +187,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         # Schreibe Parameterwerte und Standardfehler
         df_results.loc[params.index, f'coeff_{szenario}'] = params_stars_series
         df_results.loc[std_errors.index, f'std_error_{szenario}'] = std_errors.round(2)
-        df_results.loc[standardized_betas.index, f'std_beta_{szenario}'] = standardized_betas.round(2)
+        df_results.loc[standardized_fractional_logits.index, f'std_fractional_logit_{szenario}'] = standardized_fractional_logits.round(2)
 
         # Statistische Testwerte (t oder z) – je nach Regressions-Typ
         if regression_type == "ols":
@@ -320,7 +320,7 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
 def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type, threshold, Name):
 
     # Formatierter Regressionstyp für Beschriftungen
-    reg_label = "Linear Regression" if regression_type == "ols" else "Beta-Regression"
+    reg_label = "Linear Regression" if regression_type == "ols" else "Fractional Logit Regression"
     reg_suffix = regression_type.lower()
 
     params_score = models.params
@@ -408,10 +408,10 @@ def main():
     # Pfad zur Excel-Datei, welche beide Arbeitsblätter enthält
     #Ergebnisse_final_EP_min_Netze_AVG
     #Ergebnisse_final_EP_min_Netze_min_Indi
-    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\Ergebnisse_final_EP_min_Netze_min_Indi.xlsx"
+    excel_file = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\n200\Ergebnisse_final_EP_min_Netze_min_Indi_n200.xlsx"
 
     # Output-Verzeichnis
-    output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots"
+    output_dir = r"C:\Users\runte\Dropbox\Zwischenablage\Regression_Plots\n200\Wooldrige"
 
     # Lese die beiden Arbeitsblätter in separate DataFrames
     df_indikatoren = pd.read_excel(excel_file, sheet_name="Indikatoren_final")
@@ -420,9 +420,9 @@ def main():
     # Liste der zu ignorierenden Indikatoren
     #zu_ignorierende_indikatoren = ["Time required","Flexibility Average", "Flexibility Feasible Operating Region scaled", "Redundancy Average", "Redundancy N-3", "Self Sufficiency At Bus Level", "Self Sufficiency System"]  # <- Hier anpassen
     #zu_ignorierende_indikatoren = ["Time required","Disparity Generators scaled", "Disparity Lines scaled", "Disparity Loads scaled", "Disparity Transformers scaled", "Generation Shannon Evenness scaled", "Line Shannon Evenness scaled", "Load Shannon Evenness scaled", "Transformer Shannon Evenness scaled", "Generation Variety scaled", "Line Variety scaled", "Load Variety scaled", "Transformer Variety scaled"]  # <- Hier anpassen
-    zu_ignorierende_indikatoren = ["Time required", "Diversity Generation",	"Diversity Load",	"Diversity Transformers",	"Diversity Lines"]  # <- Hier anpassen
+    zu_ignorierende_indikatoren = ["Time required", "Diversity Generation",	"Diversity Load",	"Diversity Transformers", "Diversity Lines", "Load Shannon Evenness scaled", "Load Variety scaled"]  # <- Hier anpassen
 
-    Name = "beta_neu_4"
+    Name = "ols_final_EP"
 
     df_merged = preprocess_data(df_indikatoren, df_szenarien)
 
@@ -434,7 +434,8 @@ def main():
 
     szenarien_spalten = [col for col in df_szenarien.columns if col != "Netz"]
 
-    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=4, regression_type="beta")
+    run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name, threshold=4, regression_type="fractional_logit", Wooldrige = True)
+    # "ols" oder "fractional_logit"
 
 
 if __name__ == "__main__":
