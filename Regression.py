@@ -8,6 +8,11 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from matplotlib.lines import Line2D
 from scipy.stats import shapiro
 import statsmodels.formula.api as smf
+from statsmodels.stats.diagnostic import linear_reset
+from statsmodels.base.model import LikelihoodModelResults
+from scipy.stats import chi2
+from scipy.special import logit
+
 
 
 
@@ -67,6 +72,31 @@ def preprocess_data(df_indikatoren, df_szenarien):
         df_merged.fillna(df_merged.mean(numeric_only=True), inplace=True)
     return df_merged
 
+def get_correlation_matrix(df, indikatoren_spalten, szenarien_spalten):
+    """
+    Berechnet die Pearson-Korrelation zwischen allen Indikatoren und jedem Szenario.
+    Gibt eine kombinierte Tabelle zurück und speichert sie als Excel-Sheet.
+    """
+    # Initialisiere leeres DataFrame für Korrelationen
+    df_corr_all = pd.DataFrame(index=indikatoren_spalten)
+
+    for szenario in szenarien_spalten:
+        y = df[szenario]
+        X = df[indikatoren_spalten]
+
+        # Nur numerische Spalten verwenden
+        df_corr = X.copy()
+        df_corr["Zielvariable"] = y
+
+        # Berechne Korrelationen (nur numerisch)
+        corr_matrix = df_corr.corr(numeric_only=True)
+        if "Zielvariable" in corr_matrix.columns:
+            corr_with_y = corr_matrix["Zielvariable"].drop("Zielvariable")
+            df_corr_all[szenario] = corr_with_y
+        else:
+            print(f"⚠️ Keine gültigen Korrelationen berechnet für '{szenario}'.")
+
+    return df_corr_all.round(3)
 
 def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir, Name , threshold, regression_type, Wooldrige):
     ergebnisse_szenarien = {}
@@ -74,6 +104,14 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
     df_results = pd.DataFrame()
     os.makedirs(output_dir, exist_ok=True)
     normaltest_rows = []
+    reset_results = []
+    df_model_metrics = pd.DataFrame(columns=[
+            "R²", "Adjusted R²", "F-Statistic", "F-Test p-value", "AIC", "BIC",
+            "Log-Likelihood", "Number of Observations", "RESET-Teststatistik", "RESET-p-Wert"
+        ])
+
+    # === Korrelationen berechnen ===
+    df_corr_all = get_correlation_matrix(df_merged, indikatoren_spalten, szenarien_spalten)
 
     for szenario in szenarien_spalten:
         X = df_merged[indikatoren_spalten].copy()
@@ -121,13 +159,125 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             formula = 'y ~ ' + ' + '.join(col for col in data.columns if col != 'y')
             model = smf.glm(formula=formula, data=data,
                             family=sm.families.Binomial(link=sm.families.links.Logit())).fit()
+
+            # Nutze lineare Vorhersage (xβ)
+            xb_hat = model.predict(linear=True)
+            data['xb_hat'] = xb_hat
+
+            for power in [2, 3]:
+                # Neue Spalte für xb^power
+                power_col = f"xb_hat_{power}"
+
+                # Erweitertes Modell
+                data[power_col] = xb_hat ** power
+                reset_formula = formula + f' + {power_col}'
+                model_reset = smf.glm(formula=reset_formula, data=data,
+                                      family=sm.families.Binomial(link=sm.families.links.Logit())).fit()
+
+                # LR-Test: 2*(LL_restricted - LL_unrestricted)
+                lr_stat = 2 * (model_reset.llf - model.llf)
+                df_diff = model_reset.df_model - model.df_model
+                p_value = chi2.sf(lr_stat, df_diff)
+
+                reset_results.append({
+                    "LR-statistic": round(lr_stat, 3),
+                    "df": int(df_diff),
+                    "p-value": round(p_value, 4),
+                    "Szenario": szenario,
+                    "Power": power,
+                    "LR-Statistik": round(lr_stat, 4),
+                    "Freiheitsgrade": df_diff,
+                    "p-Wert": round(p_value, 4),
+                    "Interpretation": "Nicht verworfen" if p_value > 0.05 else "Verworfen"
+                })
         else:
             raise ValueError("Ungültiger Regressions-Typ. Bitte 'ols' oder 'fractional_logit' angeben.")
 
         ergebnisse_szenarien[szenario] = model
 
+        # === Berechne MEM & AME für fractional_logit ===
+        if regression_type == "fractional_logit":
+            # --- MEM (Marginal Effects at the Mean) ---
+            X_design = model.model.exog
+            mean_x = X_design.mean(axis=0)
+            xb_mean = np.dot(mean_x, model.params)
+            g_z = np.exp(xb_mean) / (1 + np.exp(xb_mean)) ** 2
+            mem = model.params * g_z
+            mem_se = model.bse * g_z
+
+            # --- AME (Average Marginal Effects) ---
+            xb_all = np.dot(X_design, model.params)
+            g_xb_all = np.exp(xb_all) / (1 + np.exp(xb_all)) ** 2
+            ame = (g_xb_all[:, np.newaxis] * X_design).mean(axis=0)
+            ame_se = model.bse * g_xb_all.mean()
+
+            # Save als DataFrames (nur ohne Intercept)
+            indikator_namen = [col for col in model.params.index if col.lower() not in ['const', 'intercept']]
+            ame_dict = {ind: ame[i] for i, ind in enumerate(model.params.index) if ind in indikator_namen}
+            mem_dict = {ind: mem[ind] for ind in indikator_namen}
+
+            if 'df_ame' not in locals():
+                df_ame = pd.DataFrame(index=indikator_namen)
+                df_mem = pd.DataFrame(index=indikator_namen)
+
+            df_ame[f"AME_{szenario}"] = pd.Series(ame_dict).round(4)
+            df_mem[f"MEM_{szenario}"] = pd.Series(mem_dict).round(4)
+
+        # === RESET-Test zur Modellgüte ===
+        if regression_type == "ols":
+            try:
+                reset_test = linear_reset(model, power=2, use_f=True)
+                print(f"RESET-Test (OLS) für '{szenario}': F = {reset_test.fvalue:.2f}, p = {reset_test.pvalue:.4f}")
+                reset_result = {
+                    "RESET-Teststatistik": round(reset_test.fvalue, 2),
+                    "RESET-p-Wert": round(reset_test.pvalue, 4)
+                }
+            except Exception as e:
+                print(f"Fehler beim RESET-Test für OLS: {e}")
+                reset_result = {
+                    "RESET-Teststatistik": np.nan,
+                    "RESET-p-Wert": np.nan
+                }
+
+        elif regression_type == "fractional_logit":
+            try:
+                xb = model.fittedvalues
+                xb_sq = xb ** 2
+                df_reset = X_n.copy()
+                df_reset["xb_sq"] = xb_sq
+                df_reset["y"] = y
+
+                formula_reset = 'y ~ ' + ' + '.join(df_reset.columns.difference(['y']))
+                model_reset = smf.glm(formula=formula_reset, data=df_reset,
+                                      family=sm.families.Binomial(link=sm.families.links.Logit())).fit()
+
+                lr_stat = 2 * (model_reset.llf - model.llf)
+                lr_pval = chi2.sf(lr_stat, df=1)
+
+                print(
+                    f"RESET-Test (Fractional Logit) für '{szenario}': LR-Statistik = {lr_stat:.2f}, p = {lr_pval:.4f}")
+                reset_result = {
+                    "RESET-Teststatistik": round(lr_stat, 2),
+                    "RESET-p-Wert": round(lr_pval, 4)
+                }
+            except Exception as e:
+                print(f"Fehler beim RESET-Test (fractional_logit): {e}")
+                reset_result = {
+                    "RESET-Teststatistik": np.nan,
+                    "RESET-p-Wert": np.nan
+                }
+        else:
+            reset_result = {
+                "RESET-Teststatistik": np.nan,
+                "RESET-p-Wert": np.nan
+            }
+
         # Plots und Summary speichern
-        plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type, threshold, Name)
+        if regression_type == "fractional_logit":
+            plot_regression_logit(model, szenario, output_dir, Name, threshold)
+        else:
+            plot_regression(model, szenario, X_n.columns, output_dir, excluded_info, regression_type, threshold, Name)
+
         save_summary(model, szenario, output_dir, regression_type,threshold, Name)
 
         # === Shapiro-Wilk-Test für Residuen ===
@@ -213,12 +363,6 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         # Zuweisung der Konfidenzintervalle
         df_results.loc[params.index, conf_colname] = conf_formatted
 
-        if 'df_model_metrics' not in locals():
-            df_model_metrics = pd.DataFrame(columns=[
-                "R²", "Adjusted R²", "F-Statistic", "F-Test p-value", "AIC", "BIC",
-                "Log-Likelihood", "Number of Observations"
-            ])
-
         if regression_type == "ols":
             r_squared = round(model.rsquared, 2)
             adj_r_squared = round(model.rsquared_adj, 2)
@@ -289,10 +433,14 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
             })
 
     df_normaltests = pd.DataFrame(normaltest_rows)
+    df_reset_tests = pd.DataFrame(reset_results)
 
     # Excel Export am Ende
     export_path = os.path.join(output_dir, f"regression_results_{Name}_{regression_type}_{threshold}.xlsx")
     with pd.ExcelWriter(export_path, engine='openpyxl', mode='w') as writer:
+        # export Korrelationstabelle
+        df_corr_all.to_excel(writer, sheet_name="Korrelationen")
+
         df_results.to_excel(writer, sheet_name='Regressionsdetails')
 
         # Transponieren für bessere Lesbarkeit (jede Zeile = Szenario)
@@ -300,6 +448,9 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         df_model_metrics.to_excel(writer, sheet_name='Modellmetriken')
 
         df_normaltests.to_excel(writer, sheet_name='Normalverteilungstests', index=False)
+
+        if not df_reset_tests.empty:
+            df_reset_tests.to_excel(writer, sheet_name="RESET-Test", index=False)
 
         # === Neues Sheet: Ausgeschlossene Indikatoren ===
         excluded_rows = []
@@ -313,9 +464,126 @@ def run_regression(df_merged, indikatoren_spalten, szenarien_spalten, output_dir
         df_excluded = pd.DataFrame(excluded_rows)
         df_excluded.to_excel(writer, sheet_name='Ausgeschlossene Indikatoren', index=False)
 
+        if regression_type == "fractional_logit":
+            if 'df_ame' in locals():
+                df_ame.to_excel(writer, sheet_name="AME", index=True)
+            if 'df_mem' in locals():
+                df_mem.to_excel(writer, sheet_name="MEM", index=True)
+
     print(f"Gesamtergebnis-DataFrame wurde als Excel exportiert: {export_path}")
     return ergebnisse_szenarien
 
+def plot_regression_logit(model, szenario, output_dir, Name, threshold):
+    """
+    Erstellt Plots für fractional_logit-Modelle:
+    1. Regressionskoeffizienten
+    2. MEM (Marginal Effects at the Mean)
+    3. AME (Average Marginal Effects)
+    """
+
+    reg_suffix = "fractional_logit"
+    indikator_namen = [col for col in model.params.index if col.lower() not in ['const', 'intercept']]
+
+    # -----------------------
+    # 1. Koeffizientenplot
+    # -----------------------
+    try:
+        params = model.params[indikator_namen]
+        conf = model.conf_int().loc[indikator_namen]
+        p_values = model.pvalues[indikator_namen]
+
+        coef_vals = params.values
+        lower_error = coef_vals - conf[0].values
+        upper_error = conf[1].values - coef_vals
+        x_pos = np.arange(len(indikator_namen)) * 2
+        labels = [f"{ind}*" if p < 0.05 else ind for ind, p in zip(indikator_namen, p_values)]
+
+        plt.figure(figsize=(12, 8))
+        for x, coef, lo, up in zip(x_pos, coef_vals, lower_error, upper_error):
+            color = 'green' if coef > 0 else 'red'
+            plt.errorbar(x, coef, yerr=[[lo], [up]], fmt='x', color=color, capsize=5)
+
+        plt.xticks(x_pos, labels, rotation=45, ha="right")
+        plt.axhline(0, color='gray', linestyle='--')
+        plt.title(f"Fractional Logit Coefficients – {szenario}")
+        plt.ylabel("Coefficient")
+        plt.tight_layout()
+        path = os.path.join(output_dir, f"logit_coefficients_{Name}_{reg_suffix}_{szenario}_{threshold}.png")
+        plt.savefig(path, dpi=400)
+        plt.close()
+        print(f"Koeffizientenplot gespeichert unter: {path}")
+    except Exception as e:
+        print(f"⚠️ Fehler beim Koeffizientenplot: {e}")
+
+    # -----------------------
+    # 2. MEM: g(z_mean) * β
+    # -----------------------
+    try:
+        X_mean = model.model.exog.mean(axis=0)
+        xb_mean = np.dot(X_mean, model.params)
+        g_z = np.exp(xb_mean) / (1 + np.exp(xb_mean))**2
+        mem = model.params * g_z
+        mem_se = model.bse * g_z
+
+        mem_vals = mem[indikator_namen].values
+        se_vals = mem_se[indikator_namen].values
+        lower = mem_vals - 1.96 * se_vals
+        upper = mem_vals + 1.96 * se_vals
+
+        x_pos = np.arange(len(indikator_namen)) * 2
+
+        plt.figure(figsize=(12, 8))
+        for x, coef, lo, up in zip(x_pos, mem_vals, lower, upper):
+            color = 'green' if coef > 0 else 'red'
+            plt.errorbar(x, coef, yerr=[[coef - lo], [up - coef]], fmt='o', color=color, capsize=5)
+
+        plt.xticks(x_pos, indikator_namen, rotation=45, ha="right")
+        plt.axhline(0, color='gray', linestyle='--')
+        plt.title(f"Marginal Effects at the Mean (MEM) – {szenario}")
+        plt.ylabel("Marginal Effect")
+        plt.tight_layout()
+        path = os.path.join(output_dir, f"marginal_effects_MEM_{Name}_{reg_suffix}_{szenario}_{threshold}.png")
+        plt.savefig(path, dpi=400)
+        plt.close()
+        print(f"MEM-Plot gespeichert unter: {path}")
+    except Exception as e:
+        print(f"⚠️ Fehler beim MEM-Plot: {e}")
+
+    # -----------------------
+    # 3. AME: Durchschnitt der g(z_i) * β
+    # -----------------------
+    try:
+        X = model.model.exog
+        xb_all = np.dot(X, model.params)
+        g_z_all = np.exp(xb_all) / (1 + np.exp(xb_all))**2  # N x 1
+
+        ame_values = g_z_all[:, np.newaxis] * model.params.values[np.newaxis, :]  # N x K
+        ame_mean = ame_values.mean(axis=0)
+        ame_std = ame_values.std(axis=0) / np.sqrt(X.shape[0])  # SE über Mittelwert
+
+        ame_vals = ame_mean[1:]  # ohne Intercept
+        se_vals = ame_std[1:]
+        lower = ame_vals - 1.96 * se_vals
+        upper = ame_vals + 1.96 * se_vals
+
+        x_pos = np.arange(len(indikator_namen)) * 2
+
+        plt.figure(figsize=(12, 8))
+        for x, coef, lo, up in zip(x_pos, ame_vals, lower, upper):
+            color = 'green' if coef > 0 else 'red'
+            plt.errorbar(x, coef, yerr=[[coef - lo], [up - coef]], fmt='d', color=color, capsize=5)
+
+        plt.xticks(x_pos, indikator_namen, rotation=45, ha="right")
+        plt.axhline(0, color='gray', linestyle='--')
+        plt.title(f"Average Marginal Effects (AME) – {szenario}")
+        plt.ylabel("Average Marginal Effect")
+        plt.tight_layout()
+        path = os.path.join(output_dir, f"marginal_effects_AME_{Name}_{reg_suffix}_{szenario}_{threshold}.png")
+        plt.savefig(path, dpi=400)
+        plt.close()
+        print(f"AME-Plot gespeichert unter: {path}")
+    except Exception as e:
+        print(f"⚠️ Fehler beim AME-Plot: {e}")
 
 def plot_regression(models, szenario, indikatoren_spalten, output_dir, excluded_info, regression_type, threshold, Name):
 
